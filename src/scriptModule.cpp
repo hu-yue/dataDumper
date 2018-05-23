@@ -39,6 +39,10 @@ bool scriptModule::configure(ResourceFinder &rf) {
     {
       thread.dump_robot = false;
       thread.dump_simulator = true;
+    } else
+    {
+      thread.dump_robot = true;
+      thread.dump_simulator = false;
     }
     
     if(rf.check("carrier"))

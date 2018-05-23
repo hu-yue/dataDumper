@@ -247,10 +247,32 @@ void WorkingThread::dump_data(int j)
         cout << "Error in reading the IMU on RIGHT leg" << endl;
       }
       
-      gyro = imu_left_bottle->get(0).asList()->get(0).asList()->get(0).asList()->get(0).asList();
-      acc = imu_left_bottle->get(1).asList()->get(0).asList()->get(0).asList()->get(0).asList();
-      magn = imu_left_bottle->get(2).asList()->get(0).asList()->get(0).asList()->get(0).asList();
-      ort = imu_left_bottle->get(3).asList()->get(0).asList()->get(0).asList()->get(0).asList();
+      gyro = imu_left_bottle->get(0).asList()->get(0).asList()->get(0).asList();
+      acc = imu_left_bottle->get(1).asList()->get(0).asList()->get(0).asList();
+      magn = imu_left_bottle->get(2).asList()->get(0).asList()->get(0).asList();
+      ort = imu_left_bottle->get(3).asList()->get(0).asList()->get(0).asList();
+      
+      for(unsigned int i = 0; i < 3; i++)
+      {
+        fprintf(imu_data_file, "%e, ", gyro->get(i).asDouble());
+      }
+      for(unsigned int i = 0; i < 3; i++)
+      {
+        fprintf(imu_data_file, "%e, ", acc->get(i).asDouble());
+      }
+      for(unsigned int i = 0; i < 3; i++)
+      {
+        fprintf(imu_data_file, "%e, ", magn->get(i).asDouble());
+      }
+      for(unsigned int i = 0; i < 3; i++)
+      {
+        fprintf(imu_data_file, "%e, ", ort->get(i).asDouble());
+      }
+      
+      gyro = imu_right_bottle->get(0).asList()->get(0).asList()->get(0).asList();
+      acc = imu_right_bottle->get(1).asList()->get(0).asList()->get(0).asList();
+      magn = imu_right_bottle->get(2).asList()->get(0).asList()->get(0).asList();
+      ort = imu_right_bottle->get(3).asList()->get(0).asList()->get(0).asList();
       
       for(unsigned int i = 0; i < 3; i++)
       {
