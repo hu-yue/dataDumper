@@ -25,6 +25,7 @@ WorkingThread::WorkingThread(int period): RateThread(period)
     dump_pwm = false;
     dump_imu = false;
     dump_walking = false;
+    feetOrtTest = false;
     
     carrier = "udp";
     
@@ -79,6 +80,16 @@ WorkingThread::~WorkingThread()
       walking_left_foot.close();
       walking_right_foot.close();
     }
+    
+    // Feet ort test
+    if(l_foot_ort_file!=NULL)
+      fclose(l_foot_ort_file);
+    if(r_foot_ort_file!=NULL)
+      fclose(r_foot_ort_file);
+    if(l_foot_ort_imu_file!=NULL)
+      fclose(l_foot_ort_imu_file);
+    if(r_foot_ort_imu_file!=NULL)
+      fclose(r_foot_ort_imu_file);
 }
 
 void WorkingThread::attachRobotDriver(robotDriver *p)
@@ -166,7 +177,125 @@ bool WorkingThread::threadInit()
       }
     }
     
+    //*** Feet ort test ****
+    if(feetOrtTest)
+    {
+      if(!model_loader.loadModelFromFile(model_name)){
+        cout <<"Error while loading the model from " << model_name << endl;
+        return false;
+      }
+      vector<string> legJoints;//"l_hip_pitch", "l_hip_roll", "l_hip_yaw", "l_knee", "l_ankle_pitch", "l_ankle_roll", "r_hip_pitch", "r_hip_roll", "r_hip_yaw", "r_knee", "r_ankle_pitch", "r_ankle_roll"
+      legJoints.resize(12);
+      legJoints[0] = "l_hip_pitch";
+      legJoints[1] = "l_hip_roll";
+      legJoints[2] = "l_hip_yaw";
+      legJoints[3] = "l_knee";
+      legJoints[4] = "l_ankle_pitch";
+      legJoints[5] = "l_ankle_roll";
+      legJoints[6] = "r_hip_pitch";
+      legJoints[7] = "r_hip_roll";
+      legJoints[8] = "r_hip_yaw";
+      legJoints[9] = "r_knee";
+      legJoints[10] = "r_ankle_pitch";
+      legJoints[11] = "r_ankle_roll";
+      model_loader.loadReducedModelFromFullModel(model_loader.model(),legJoints);
+      m_kinDyn.loadRobotModel(model_loader.model());
+      m_kinDyn.setFloatingBase("root_link");
+      cout << "Degrees of freedom: " << m_kinDyn.getNrOfDegreesOfFreedom() << endl;
+    }
+    
     return true;
+}
+
+void WorkingThread::computeFeetOrt(yarp::sig::Vector& lleg, yarp::sig::Vector& rleg, yarp::os::Bottle* lort, yarp::os::Bottle* rort)
+{
+  iDynTree::VectorDynSize legsState(12);
+  iDynTree::VectorDynSize legsStateVel(12);
+  legsStateVel.zero();
+  iDynTree::Vector3 gravity;
+  gravity.zero();
+  gravity(3) = -9.81;
+  for(unsigned int i = 0; i < 6; i++)
+  {
+    legsState(i) = lleg[i];
+    legsState(i+6) = rleg[i];
+  }
+  
+  m_kinDyn.setRobotState(iDynTree::Transform::Identity(), legsState, iDynTree::Twist::Zero(), legsStateVel, gravity);
+  
+  iDynTree::Rotation imuToStrain; // fixed from CAD https://github.com/robotology-playground/icub-model-generator/issues/91
+  iDynTree::Vector3 posZero;
+  posZero.zero();
+  
+  iDynTree::Rotation lStrainToBase;
+  iDynTree::Rotation lIMUtoEarth;
+  iDynTree::Rotation lEarthToBase;
+  iDynTree::Rotation lStrainToBaseWIMU;
+  
+  iDynTree::Position lStrainPos;
+  iDynTree::Vector3 lStrainRot;
+  iDynTree::Position lStrainPosWIMU;
+  iDynTree::Vector3 lStrainRotWIMU;
+  
+  iDynTree::Rotation rStrainToBase;
+  iDynTree::Rotation rIMUtoEarth;
+  iDynTree::Rotation rEarthToBase;
+  iDynTree::Rotation rStrainToBaseWIMU;
+  
+  iDynTree::Position rStrainPos;
+  iDynTree::Vector3 rStrainRot;
+  iDynTree::Position rStrainPosWIMU;
+  iDynTree::Vector3 rStrainRotWIMU;
+  
+  // set imuToStrain
+  imuToStrain.zero();
+  imuToStrain.setVal(0,0,-1);
+  imuToStrain.setVal(1,1,1);
+  imuToStrain.setVal(2,2,-1);
+  
+  lStrainToBase = m_kinDyn.getWorldTransform("l_foot_ft_sensor").getRotation();
+  lIMUtoEarth.RPY(lort->get(0).asDouble(),lort->get(3).asDouble(),lort->get(2).asDouble());
+  lEarthToBase = lStrainToBase*imuToStrain*lIMUtoEarth.inverse();
+  lStrainToBaseWIMU = lEarthToBase*lIMUtoEarth*imuToStrain.inverse();
+  
+  lStrainPos = m_kinDyn.getWorldTransform("l_foot_ft_sensor").getPosition();
+  lStrainRot = lStrainToBase.asRPY();
+  lStrainRotWIMU = lStrainToBaseWIMU.asRPY();
+  
+  cout << lStrainToBase.asRPY().toString() << "; " << lStrainToBaseWIMU.asRPY().toString() << endl;
+  
+  for(unsigned int i = 0; i < 3; i++)
+  {
+    fprintf(l_foot_ort_file, "%e, ", lStrainRot(i));
+  }
+  fprintf(l_foot_ort_file, "\n");
+  for(unsigned int i = 0; i < 3; i++)
+  {
+    fprintf(l_foot_ort_imu_file, "%e, ", lStrainRotWIMU(i));
+    fprintf(l_foot_ort_imu_file, "\n");
+  }
+  
+  rStrainToBase = m_kinDyn.getWorldTransform("r_foot_ft_sensor").getRotation();
+  rIMUtoEarth.RPY(rort->get(0).asDouble(),rort->get(3).asDouble(),rort->get(2).asDouble());
+  rEarthToBase = rStrainToBase*imuToStrain*rIMUtoEarth.inverse();
+  rStrainToBaseWIMU = rEarthToBase*rIMUtoEarth*imuToStrain.inverse();
+  
+  rStrainPos = m_kinDyn.getWorldTransform("r_foot_ft_sensor").getPosition();
+  rStrainRot = rStrainToBase.asRPY();
+  rStrainRotWIMU = rStrainToBaseWIMU.asRPY();
+  
+  cout << rStrainToBase.asRPY().toString() << "; " << rStrainToBaseWIMU.asRPY().toString() << endl;
+  
+  for(unsigned int i = 0; i < 3; i++)
+  {
+    fprintf(r_foot_ort_file, "%e, ", rStrainRot(i));
+  }
+  fprintf(r_foot_ort_file, "\n");
+  for(unsigned int i = 0; i < 3; i++)
+  {
+    fprintf(r_foot_ort_imu_file, "%e, ", rStrainRotWIMU(i));
+  }
+  fprintf(r_foot_ort_imu_file, "\n");
 }
 
 void WorkingThread::dump_data(int j)
@@ -174,10 +303,14 @@ void WorkingThread::dump_data(int j)
     // IMU data vectors
     yarp::os::Bottle* imu_left_bottle = NULL;
     yarp::os::Bottle* imu_right_bottle = NULL;
-    yarp::os::Bottle* gyro;
-    yarp::os::Bottle* acc;
-    yarp::os::Bottle* magn;
-    yarp::os::Bottle* ort;
+    yarp::os::Bottle* lgyro;
+    yarp::os::Bottle* lacc;
+    yarp::os::Bottle* lmagn;
+    yarp::os::Bottle* lort;
+    yarp::os::Bottle* rgyro;
+    yarp::os::Bottle* racc;
+    yarp::os::Bottle* rmagn;
+    yarp::os::Bottle* rort;
     
     // Walking data vectors
     yarp::sig::Vector walk_com_vec;
@@ -192,8 +325,69 @@ void WorkingThread::dump_data(int j)
     data_ll.resize(6);
     data_rl.resize(6);
     data_to.resize(3);
+
+    if(dump_imu)
+    {
+      imu_left_bottle = imu_left_foot.read();
+      imu_right_bottle = imu_right_foot.read();
+      
+      // we want to read the first 4 bottles
+      if(imu_left_bottle->size() < 4)
+      {
+        cout << "Error in reading the IMU on LEFT leg" << endl;
+      }
+      if(imu_right_bottle->size() < 4)
+      {
+        cout << "Error in reading the IMU on RIGHT leg" << endl;
+      }
+      
+      lgyro = imu_left_bottle->get(0).asList()->get(0).asList()->get(0).asList();
+      lacc = imu_left_bottle->get(1).asList()->get(0).asList()->get(0).asList();
+      lmagn = imu_left_bottle->get(2).asList()->get(0).asList()->get(0).asList();
+      lort = imu_left_bottle->get(3).asList()->get(0).asList()->get(0).asList();
+      
+      for(unsigned int i = 0; i < 3; i++)
+      {
+        fprintf(imu_data_file, "%e, ", lgyro->get(i).asDouble());
+      }
+      for(unsigned int i = 0; i < 3; i++)
+      {
+        fprintf(imu_data_file, "%e, ", lacc->get(i).asDouble());
+      }
+      for(unsigned int i = 0; i < 3; i++)
+      {
+        fprintf(imu_data_file, "%e, ", lmagn->get(i).asDouble());
+      }
+      for(unsigned int i = 0; i < 3; i++)
+      {
+        fprintf(imu_data_file, "%e, ", lort->get(i).asDouble());
+      }
+      
+      rgyro = imu_right_bottle->get(0).asList()->get(0).asList()->get(0).asList();
+      racc = imu_right_bottle->get(1).asList()->get(0).asList()->get(0).asList();
+      rmagn = imu_right_bottle->get(2).asList()->get(0).asList()->get(0).asList();
+      rort = imu_right_bottle->get(3).asList()->get(0).asList()->get(0).asList();
+      
+      for(unsigned int i = 0; i < 3; i++)
+      {
+        fprintf(imu_data_file, "%e, ", rgyro->get(i).asDouble());
+      }
+      for(unsigned int i = 0; i < 3; i++)
+      {
+        fprintf(imu_data_file, "%e, ", racc->get(i).asDouble());
+      }
+      for(unsigned int i = 0; i < 3; i++)
+      {
+        fprintf(imu_data_file, "%e, ", rmagn->get(i).asDouble());
+      }
+      for(unsigned int i = 0; i < 2; i++)
+      {
+        fprintf(imu_data_file, "%e, ", rort->get(i).asDouble());
+      }
+      fprintf(imu_data_file, "%e\n", rort->get(2).asDouble());
+    }
     
-    if(dump_enc)
+    if(dump_enc || feetOrtTest)
     {
       // encoders    
       driver->ienc_ll->getEncoders(data_ll.data());
@@ -211,6 +405,9 @@ void WorkingThread::dump_data(int j)
         fprintf(enc_data_file, "%e\t", data_rl[i]);
       }
       fprintf(enc_data_file, "\n");
+      
+      if(feetOrtTest && dump_imu)
+        computeFeetOrt(data_ll,data_rl,lort,rort);
     }
     
     if(dump_enc_speed)
@@ -230,67 +427,6 @@ void WorkingThread::dump_data(int j)
         fprintf(enc_speed_data_file, "%e\t", data_rl[i]);
       }
       fprintf(enc_speed_data_file, "\n");
-    }
-    
-    if(dump_imu)
-    {
-      imu_left_bottle = imu_left_foot.read();
-      imu_right_bottle = imu_right_foot.read();
-      
-      // we want to read the first 4 bottles
-      if(imu_left_bottle->size() < 4)
-      {
-        cout << "Error in reading the IMU on LEFT leg" << endl;
-      }
-      if(imu_right_bottle->size() < 4)
-      {
-        cout << "Error in reading the IMU on RIGHT leg" << endl;
-      }
-      
-      gyro = imu_left_bottle->get(0).asList()->get(0).asList()->get(0).asList();
-      acc = imu_left_bottle->get(1).asList()->get(0).asList()->get(0).asList();
-      magn = imu_left_bottle->get(2).asList()->get(0).asList()->get(0).asList();
-      ort = imu_left_bottle->get(3).asList()->get(0).asList()->get(0).asList();
-      
-      for(unsigned int i = 0; i < 3; i++)
-      {
-        fprintf(imu_data_file, "%e, ", gyro->get(i).asDouble());
-      }
-      for(unsigned int i = 0; i < 3; i++)
-      {
-        fprintf(imu_data_file, "%e, ", acc->get(i).asDouble());
-      }
-      for(unsigned int i = 0; i < 3; i++)
-      {
-        fprintf(imu_data_file, "%e, ", magn->get(i).asDouble());
-      }
-      for(unsigned int i = 0; i < 3; i++)
-      {
-        fprintf(imu_data_file, "%e, ", ort->get(i).asDouble());
-      }
-      
-      gyro = imu_right_bottle->get(0).asList()->get(0).asList()->get(0).asList();
-      acc = imu_right_bottle->get(1).asList()->get(0).asList()->get(0).asList();
-      magn = imu_right_bottle->get(2).asList()->get(0).asList()->get(0).asList();
-      ort = imu_right_bottle->get(3).asList()->get(0).asList()->get(0).asList();
-      
-      for(unsigned int i = 0; i < 3; i++)
-      {
-        fprintf(imu_data_file, "%e, ", gyro->get(i).asDouble());
-      }
-      for(unsigned int i = 0; i < 3; i++)
-      {
-        fprintf(imu_data_file, "%e, ", acc->get(i).asDouble());
-      }
-      for(unsigned int i = 0; i < 3; i++)
-      {
-        fprintf(imu_data_file, "%e, ", magn->get(i).asDouble());
-      }
-      for(unsigned int i = 0; i < 2; i++)
-      {
-        fprintf(imu_data_file, "%e, ", ort->get(i).asDouble());
-      }
-      fprintf(imu_data_file, "%e\n", ort->get(2).asDouble());
     }
     
     if(dump_walking)

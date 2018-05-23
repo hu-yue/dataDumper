@@ -10,6 +10,18 @@
 #include <yarp/os/Bottle.h>
 #include <math.h>
 
+#include <iDynTree/KinDynComputations.h>
+#include <iDynTree/ModelIO/ModelLoader.h>
+#include <iDynTree/Core/VectorDynSize.h>
+#include <iDynTree/Core/VectorFixSize.h>
+#include <iDynTree/Core/Position.h>
+#include <iDynTree/Core/Transform.h>
+#include <iDynTree/Core/EigenHelpers.h>
+#include <iDynTree/yarp/YARPEigenConversions.h>
+#include <iDynTree/yarp/YARPConversions.h>
+
+#include <Eigen/Core>
+
 #include "robotDriver.h"
 #include "actionClass.h"
 
@@ -66,7 +78,7 @@ public:
     FILE*                                     walking_feet_file;
     FILE*                                     walking_com_file;
     FILE*                                     walking_joints_file;
-    
+        
     
     yarp::os::BufferedPort<yarp::os::Bottle>  imu_left_foot;
     yarp::os::BufferedPort<yarp::os::Bottle>  imu_right_foot;
@@ -76,12 +88,28 @@ public:
     yarp::os::BufferedPort<yarp::sig::Vector>  walking_right_foot;
     yarp::os::BufferedPort<yarp::sig::Vector>  walking_joints;
     yarp::os::BufferedPort<yarp::sig::Vector>  walking_com;
+    
+    //****** FeetOrtTest ******
+    // FeetOrtTest data
+    bool                                      feetOrtTest;
+    std::vector<yarp::sig::Vector>             l_foot_ort_ref;
+    std::vector<yarp::sig::Vector>             r_foot_ort_ref;
+    FILE*                                     l_foot_ort_file;
+    FILE*                                     r_foot_ort_file;
+    FILE*                                     l_foot_ort_imu_file;
+    FILE*                                     r_foot_ort_imu_file;
+    
+    // kindyn computations
+    std::string                                model_name;
+    iDynTree::ModelLoader                      model_loader;
+    iDynTree::KinDynComputations               m_kinDyn;
 
     WorkingThread(int period=5);
     ~WorkingThread();
     void attachRobotDriver(robotDriver *p);
     bool threadInit();
     void dump_data(int j);
+    void computeFeetOrt(yarp::sig::Vector& lleg, yarp::sig::Vector& rleg, yarp::os::Bottle* lort, yarp::os::Bottle* rort);
     void run();
 };
 

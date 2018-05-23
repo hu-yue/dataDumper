@@ -63,6 +63,8 @@ int main(int argc, char *argv[])
         cout << "\t--period             <period>: the period in ms of the internal thread (default 5)"  << endl;
         cout << "\t--dump               <what to dump>: encoders, mencoders, encoder speeds, currents, pwm, imu, walking" << endl;
         cout << "\t--carrier            <carrie>: upd, tcp" << endl;
+        cout << "\t--feetOrtTest        " << endl;
+        cout << "\t--model              <model.urdf>" << endl;
         return 0;
     }
 

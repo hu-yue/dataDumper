@@ -124,42 +124,12 @@ bool scriptModule::configure(ResourceFinder &rf) {
       thread.dump_walking = true;
       cout << "Warning: no dumping part specified, dumping everything." << endl;
     }
-
-    //*** start the robot driver
-    if (!robot.configure(thread.robotName))
-    {
-        cerr<<"Error configuring position controller, check parameters"<<endl;
-        return false;
-    }
-    else {
-        cout << "Configuration done." << endl;
-    }
-
-    if (!robot.init(thread.dump_robot))
-    {
-        cerr<<"Error cannot connect to remote ports"<<endl;
-        return false;
-    }
-    else {
-        cout << "Initialization done." << endl;
-    }
-
-    //*** attach the robot driver to the thread and start it
-    thread.attachRobotDriver(&robot);
-    if (!thread.start())
-    {
-        cerr<<"ERROR: Thread did not start, queue will not work"<<endl;
-    }
-    else
-    {
-        cout<<"Thread started"<<endl;
-    }
-
+    
     if (rf.check("period")==true)
     {
-        thread.period = rf.find("period").asInt();
-        cout << "Thread period set to "<<thread.period<< "ms" <<endl;
-        thread.setRate(thread.period);
+      thread.period = rf.find("period").asInt();
+      cout << "Thread period set to "<<thread.period<< "ms" <<endl;
+      thread.setRate(thread.period);
     }
     
     // open files for data dumping
@@ -199,6 +169,51 @@ bool scriptModule::configure(ResourceFinder &rf) {
         thread.walking_joints_file = fopen("walking_joints.txt", "w");
         thread.walking_feet_file = fopen("walking_feet.txt", "w");
       }
+    }
+    
+    
+    //**** Feet ort test
+    if(rf.check("feetOrtTest"))
+    {
+      thread.feetOrtTest = true;
+    }
+    if(thread.feetOrtTest)
+    {
+      thread.model_name = rf.check("model",yarp::os::Value("model.urdf")).asString();
+      thread.l_foot_ort_file = fopen("l_foot_ort.txt","w");
+      thread.r_foot_ort_file = fopen("r_foot_ort.txt","w");
+      thread.l_foot_ort_imu_file = fopen("l_foot_ort_imu.txt","w");
+      thread.r_foot_ort_imu_file = fopen("r_foot_ort_imu.txt","w");
+    }
+
+    //*** start the robot driver
+    if (!robot.configure(thread.robotName))
+    {
+        cerr<<"Error configuring position controller, check parameters"<<endl;
+        return false;
+    }
+    else {
+        cout << "Configuration done." << endl;
+    }
+
+    if (!robot.init(thread.dump_robot))
+    {
+        cerr<<"Error cannot connect to remote ports"<<endl;
+        return false;
+    }
+    else {
+        cout << "Initialization done." << endl;
+    }
+
+    //*** attach the robot driver to the thread and start it
+    thread.attachRobotDriver(&robot);
+    if (!thread.start())
+    {
+        cerr<<"ERROR: Thread did not start, queue will not work"<<endl;
+    }
+    else
+    {
+        cout<<"Thread started"<<endl;
     }
 
     cout << "Using parameters:" << endl << rf.toString() << endl;
