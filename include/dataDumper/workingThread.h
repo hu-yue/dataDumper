@@ -103,13 +103,16 @@ public:
     std::string                                model_name;
     iDynTree::ModelLoader                      model_loader;
     iDynTree::KinDynComputations               m_kinDyn;
+    iDynTree::Rotation                         imuToStrain; // fixed from CAD https://github.com/robotology-playground/icub-model-generator/issues/91
+    iDynTree::Rotation                         lEarthToBase; // computed only in the first run
+    iDynTree::Rotation                         rEarthToBase; // computed only in the first run
 
     WorkingThread(int period=5);
     ~WorkingThread();
     void attachRobotDriver(robotDriver *p);
     bool threadInit();
     void dump_data(int j);
-    void computeFeetOrt(yarp::sig::Vector& lleg, yarp::sig::Vector& rleg, yarp::os::Bottle* lort, yarp::os::Bottle* rort);
+    void computeFeetOrt(int j, yarp::sig::Vector& lleg, yarp::sig::Vector& rleg, yarp::os::Bottle* lort, yarp::os::Bottle* rort);
     void run();
 };
 

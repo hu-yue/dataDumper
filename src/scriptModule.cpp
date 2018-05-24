@@ -196,7 +196,7 @@ bool scriptModule::configure(ResourceFinder &rf) {
         cout << "Configuration done." << endl;
     }
 
-    if (!robot.init(thread.dump_robot))
+    if (!robot.init(thread.dump_robot && thread.dump_enc))
     {
         cerr<<"Error cannot connect to remote ports"<<endl;
         return false;

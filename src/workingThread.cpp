@@ -104,8 +104,8 @@ bool WorkingThread::threadInit()
     
     if(dump_imu)
     {
-      imu_left_foot.open("/" + name + "/right_leg/imu/measures:i");
-      imu_right_foot.open("/" + name + "/left_leg/imu/measures:i");
+      imu_left_foot.open("/" + name + "/left_leg/imu/measures:i");
+      imu_right_foot.open("/" + name + "/right_leg/imu/measures:i");
       
       if(!yarp::os::Network::connect("/" + robotName + "/left_leg/imu/measures:o", "/" + name + "/left_leg/imu/measures:i", carrier)){
         cout << "Unable to connect to LEFT leg IMU port." << endl;
@@ -202,67 +202,74 @@ bool WorkingThread::threadInit()
       m_kinDyn.loadRobotModel(model_loader.model());
       m_kinDyn.setFloatingBase("root_link");
       cout << "Degrees of freedom: " << m_kinDyn.getNrOfDegreesOfFreedom() << endl;
+      
+      // set imuToStrain
+      imuToStrain.zero();
+      imuToStrain.setVal(0,0,-1);
+      imuToStrain.setVal(1,1,1);
+      imuToStrain.setVal(2,2,-1);
+      
+      lEarthToBase = iDynTree::Rotation::Identity();
+      rEarthToBase = iDynTree::Rotation::Identity();
     }
     
     return true;
 }
 
-void WorkingThread::computeFeetOrt(yarp::sig::Vector& lleg, yarp::sig::Vector& rleg, yarp::os::Bottle* lort, yarp::os::Bottle* rort)
+void WorkingThread::computeFeetOrt(int j, yarp::sig::Vector& lleg, yarp::sig::Vector& rleg, yarp::os::Bottle* lort, yarp::os::Bottle* rort)
 {
   iDynTree::VectorDynSize legsState(12);
   iDynTree::VectorDynSize legsStateVel(12);
   legsStateVel.zero();
   iDynTree::Vector3 gravity;
   gravity.zero();
-  gravity(3) = -9.81;
+  gravity(2) = -9.81;
   for(unsigned int i = 0; i < 6; i++)
   {
-    legsState(i) = lleg[i];
-    legsState(i+6) = rleg[i];
+    legsState(i) = iDynTree::deg2rad(lleg[i]);
+    legsState(i+6) = iDynTree::deg2rad(rleg[i]);
   }
   
   m_kinDyn.setRobotState(iDynTree::Transform::Identity(), legsState, iDynTree::Twist::Zero(), legsStateVel, gravity);
   
-  iDynTree::Rotation imuToStrain; // fixed from CAD https://github.com/robotology-playground/icub-model-generator/issues/91
   iDynTree::Vector3 posZero;
   posZero.zero();
   
-  iDynTree::Rotation lStrainToBase;
-  iDynTree::Rotation lIMUtoEarth;
-  iDynTree::Rotation lEarthToBase;
-  iDynTree::Rotation lStrainToBaseWIMU;
+  iDynTree::Rotation lStrainToBase = iDynTree::Rotation::Identity();
+  iDynTree::Rotation lIMUtoEarth = iDynTree::Rotation::Identity();
+  iDynTree::Rotation lStrainToBaseWIMU = iDynTree::Rotation::Identity();
   
   iDynTree::Position lStrainPos;
   iDynTree::Vector3 lStrainRot;
   iDynTree::Position lStrainPosWIMU;
   iDynTree::Vector3 lStrainRotWIMU;
   
-  iDynTree::Rotation rStrainToBase;
-  iDynTree::Rotation rIMUtoEarth;
-  iDynTree::Rotation rEarthToBase;
-  iDynTree::Rotation rStrainToBaseWIMU;
+  iDynTree::Rotation rStrainToBase = iDynTree::Rotation::Identity();
+  iDynTree::Rotation rIMUtoEarth = iDynTree::Rotation::Identity();
+  iDynTree::Rotation rStrainToBaseWIMU = iDynTree::Rotation::Identity();
   
   iDynTree::Position rStrainPos;
   iDynTree::Vector3 rStrainRot;
   iDynTree::Position rStrainPosWIMU;
   iDynTree::Vector3 rStrainRotWIMU;
   
-  // set imuToStrain
-  imuToStrain.zero();
-  imuToStrain.setVal(0,0,-1);
-  imuToStrain.setVal(1,1,1);
-  imuToStrain.setVal(2,2,-1);
-  
-  lStrainToBase = m_kinDyn.getWorldTransform("l_foot_ft_sensor").getRotation();
-  lIMUtoEarth.RPY(lort->get(0).asDouble(),lort->get(3).asDouble(),lort->get(2).asDouble());
-  lEarthToBase = lStrainToBase*imuToStrain*lIMUtoEarth.inverse();
+  lStrainToBase = m_kinDyn.getRelativeTransform("root_link","l_foot_ft_sensor").getRotation();
+  lIMUtoEarth = iDynTree::Rotation::RPY(iDynTree::deg2rad(lort->get(0).asDouble()),iDynTree::deg2rad(lort->get(1).asDouble()),iDynTree::deg2rad(lort->get(2).asDouble()));
+  //lIMUtoEarth = lIMUtoEarth.inverse();
+  // compute Earth to Base in the first run
+  if(j == 0)
+  {
+    lEarthToBase = lStrainToBase*imuToStrain*lIMUtoEarth.inverse();
+  }
   lStrainToBaseWIMU = lEarthToBase*lIMUtoEarth*imuToStrain.inverse();
   
-  lStrainPos = m_kinDyn.getWorldTransform("l_foot_ft_sensor").getPosition();
+  lStrainPos = m_kinDyn.getRelativeTransform("root_link","l_foot_ft_sensor").getPosition();
   lStrainRot = lStrainToBase.asRPY();
   lStrainRotWIMU = lStrainToBaseWIMU.asRPY();
   
-  cout << lStrainToBase.asRPY().toString() << "; " << lStrainToBaseWIMU.asRPY().toString() << endl;
+  cout << "IMU left foot: " << lort->toString() << endl;
+  cout << "IMU to Earth left: " << lIMUtoEarth.asRPY().toString() << endl;
+  cout << "Left Kinematics; fromIMU: " << lStrainToBase.asRPY().toString() << "; " << lStrainToBaseWIMU.asRPY().toString() << endl;
   
   for(unsigned int i = 0; i < 3; i++)
   {
@@ -272,19 +279,26 @@ void WorkingThread::computeFeetOrt(yarp::sig::Vector& lleg, yarp::sig::Vector& r
   for(unsigned int i = 0; i < 3; i++)
   {
     fprintf(l_foot_ort_imu_file, "%e, ", lStrainRotWIMU(i));
-    fprintf(l_foot_ort_imu_file, "\n");
   }
+  fprintf(l_foot_ort_imu_file, "\n");
   
-  rStrainToBase = m_kinDyn.getWorldTransform("r_foot_ft_sensor").getRotation();
-  rIMUtoEarth.RPY(rort->get(0).asDouble(),rort->get(3).asDouble(),rort->get(2).asDouble());
-  rEarthToBase = rStrainToBase*imuToStrain*rIMUtoEarth.inverse();
+  rStrainToBase = m_kinDyn.getRelativeTransform("root_link","r_foot_ft_sensor").getRotation();
+  rIMUtoEarth = iDynTree::Rotation::RPY(iDynTree::deg2rad(rort->get(0).asDouble()),iDynTree::deg2rad(rort->get(1).asDouble()),iDynTree::deg2rad(rort->get(2).asDouble()));
+  //rIMUtoEarth = rIMUtoEarth.inverse();
+  // compute Earth to Base in the first run
+  if(j == 0)
+  {
+    rEarthToBase = rStrainToBase*imuToStrain*rIMUtoEarth.inverse();
+  }
   rStrainToBaseWIMU = rEarthToBase*rIMUtoEarth*imuToStrain.inverse();
   
-  rStrainPos = m_kinDyn.getWorldTransform("r_foot_ft_sensor").getPosition();
+  rStrainPos = m_kinDyn.getRelativeTransform("root_link","r_foot_ft_sensor").getPosition();
   rStrainRot = rStrainToBase.asRPY();
   rStrainRotWIMU = rStrainToBaseWIMU.asRPY();
   
-  cout << rStrainToBase.asRPY().toString() << "; " << rStrainToBaseWIMU.asRPY().toString() << endl;
+  cout << "IMU right foot: " << rort->toString() << endl;
+  cout << "IMU to Earth right: " << rIMUtoEarth.asRPY().toString() << endl;
+  cout << "Right Kinematics; fromIMU: " << rStrainToBase.asRPY().toString() << "; " << rStrainToBaseWIMU.asRPY().toString() << endl << endl;
   
   for(unsigned int i = 0; i < 3; i++)
   {
@@ -328,8 +342,8 @@ void WorkingThread::dump_data(int j)
 
     if(dump_imu)
     {
-      imu_left_bottle = imu_left_foot.read();
-      imu_right_bottle = imu_right_foot.read();
+      imu_left_bottle = imu_left_foot.read(false);
+      imu_right_bottle = imu_right_foot.read(false);
       
       // we want to read the first 4 bottles
       if(imu_left_bottle->size() < 4)
@@ -407,7 +421,7 @@ void WorkingThread::dump_data(int j)
       fprintf(enc_data_file, "\n");
       
       if(feetOrtTest && dump_imu)
-        computeFeetOrt(data_ll,data_rl,lort,rort);
+        computeFeetOrt(j,data_ll,data_rl,lort,rort);
     }
     
     if(dump_enc_speed)
