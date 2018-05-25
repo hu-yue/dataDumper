@@ -238,6 +238,7 @@ void WorkingThread::computeFeetOrt(int j, yarp::sig::Vector& lleg, yarp::sig::Ve
   iDynTree::Rotation lStrainToBase = iDynTree::Rotation::Identity();
   iDynTree::Rotation lIMUtoEarth = iDynTree::Rotation::Identity();
   iDynTree::Rotation lStrainToBaseWIMU = iDynTree::Rotation::Identity();
+  iDynTree::Rotation lIMUtoEarthKin = iDynTree::Rotation::Identity();
   
   iDynTree::Position lStrainPos;
   iDynTree::Vector3 lStrainRot;
@@ -247,6 +248,7 @@ void WorkingThread::computeFeetOrt(int j, yarp::sig::Vector& lleg, yarp::sig::Ve
   iDynTree::Rotation rStrainToBase = iDynTree::Rotation::Identity();
   iDynTree::Rotation rIMUtoEarth = iDynTree::Rotation::Identity();
   iDynTree::Rotation rStrainToBaseWIMU = iDynTree::Rotation::Identity();
+  iDynTree::Rotation rIMUtoEarthKin = iDynTree::Rotation::Identity();
   
   iDynTree::Position rStrainPos;
   iDynTree::Vector3 rStrainRot;
@@ -263,13 +265,18 @@ void WorkingThread::computeFeetOrt(int j, yarp::sig::Vector& lleg, yarp::sig::Ve
   }
   lStrainToBaseWIMU = lEarthToBase*lIMUtoEarth*imuToStrain.inverse();
   
+  lIMUtoEarthKin = lEarthToBase.inverse()*lStrainToBase*imuToStrain;
+  
   lStrainPos = m_kinDyn.getRelativeTransform("root_link","l_foot_ft_sensor").getPosition();
   lStrainRot = lStrainToBase.asRPY();
   lStrainRotWIMU = lStrainToBaseWIMU.asRPY();
   
+  cout << "Strain to IMU: " << imuToStrain.inverse().asRPY().toString() << endl;
+  
   cout << "IMU left foot: " << lort->toString() << endl;
   cout << "IMU to Earth left: " << lIMUtoEarth.asRPY().toString() << endl;
   cout << "Left Kinematics; fromIMU: " << lStrainToBase.asRPY().toString() << "; " << lStrainToBaseWIMU.asRPY().toString() << endl;
+  cout << "Left Root to Strain: " << lStrainToBase.inverse().asRPY().toString() << endl;
   
   for(unsigned int i = 0; i < 3; i++)
   {
@@ -292,6 +299,8 @@ void WorkingThread::computeFeetOrt(int j, yarp::sig::Vector& lleg, yarp::sig::Ve
   }
   rStrainToBaseWIMU = rEarthToBase*rIMUtoEarth*imuToStrain.inverse();
   
+  rIMUtoEarthKin = rEarthToBase.inverse()*rStrainToBase*imuToStrain;
+  
   rStrainPos = m_kinDyn.getRelativeTransform("root_link","r_foot_ft_sensor").getPosition();
   rStrainRot = rStrainToBase.asRPY();
   rStrainRotWIMU = rStrainToBaseWIMU.asRPY();
@@ -299,6 +308,7 @@ void WorkingThread::computeFeetOrt(int j, yarp::sig::Vector& lleg, yarp::sig::Ve
   cout << "IMU right foot: " << rort->toString() << endl;
   cout << "IMU to Earth right: " << rIMUtoEarth.asRPY().toString() << endl;
   cout << "Right Kinematics; fromIMU: " << rStrainToBase.asRPY().toString() << "; " << rStrainToBaseWIMU.asRPY().toString() << endl << endl;
+  cout << "Right Root to Strain: " << rStrainToBase.inverse().asRPY().toString() << endl;
   
   for(unsigned int i = 0; i < 3; i++)
   {
