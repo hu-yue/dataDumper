@@ -42,6 +42,11 @@ WorkingThread::WorkingThread(int period): RateThread(period)
     walking_com_file = NULL;
     walking_feet_file = NULL;
     walking_joints_file = NULL;
+    
+    l_foot_ort_file = NULL;
+    l_foot_ort_imu_file = NULL;
+    r_foot_ort_file = NULL;
+    r_foot_ort_imu_file = NULL;
 }
 
 WorkingThread::~WorkingThread()
@@ -211,6 +216,19 @@ bool WorkingThread::threadInit()
       
       lEarthToBase = iDynTree::Rotation::Identity();
       rEarthToBase = iDynTree::Rotation::Identity();
+      
+      prevLStrainRot.zero();
+      prevLStrainRotIMU.zero();
+      prevRStrainRot.zero();
+      prevRStrainRotIMU.zero();
+      
+      for(int i = 0; i < 3; i++)
+      {
+        lStrainRotOffset(i) = 1;
+        lStrainRotIMUOffset(i) = 1;
+        rStrainRotOffset(i) = 1;
+        rStrainRotIMUOffset(i) = 1;
+      }
     }
     
     return true;
@@ -256,7 +274,8 @@ void WorkingThread::computeFeetOrt(int j, yarp::sig::Vector& lleg, yarp::sig::Ve
   iDynTree::Vector3 rStrainRotWIMU;
   
   lStrainToBase = m_kinDyn.getRelativeTransform("root_link","l_foot_ft_sensor").getRotation();
-  lIMUtoEarth = iDynTree::Rotation::RPY(iDynTree::deg2rad(lort->get(0).asDouble()),iDynTree::deg2rad(lort->get(1).asDouble()),iDynTree::deg2rad(lort->get(2).asDouble()));
+  //lIMUtoEarth = iDynTree::Rotation::RPY(iDynTree::deg2rad(lort->get(0).asDouble()),iDynTree::deg2rad(lort->get(1).asDouble()),iDynTree::deg2rad(lort->get(2).asDouble()));
+  lIMUtoEarth = iDynTree::Rotation::RPY(iDynTree::deg2rad(-lort->get(1).asDouble()),iDynTree::deg2rad(-lort->get(2).asDouble()),iDynTree::deg2rad(-lort->get(0).asDouble()));
   //lIMUtoEarth = lIMUtoEarth.inverse();
   // compute Earth to Base in the first run
   if(j == 0)
@@ -271,26 +290,37 @@ void WorkingThread::computeFeetOrt(int j, yarp::sig::Vector& lleg, yarp::sig::Ve
   lStrainRot = lStrainToBase.asRPY();
   lStrainRotWIMU = lStrainToBaseWIMU.asRPY();
   
-  cout << "Strain to IMU: " << imuToStrain.inverse().asRPY().toString() << endl;
+  // check jumps
+  double jumpThreshold = iDynTree::deg2rad(2);
+  if(lStrainRot(0) < -prevLStrainRot(0)+jumpThreshold && lStrainRot(0) > -prevLStrainRot(0)-jumpThreshold)
+    lStrainRotOffset(0) = -lStrainRotOffset(0);
+  if(lStrainRot(2) < -prevLStrainRot(2)+jumpThreshold && lStrainRot(2) > -prevLStrainRot(2)-jumpThreshold)
+    lStrainRotOffset(2) = -lStrainRotOffset(2);
+  if(lStrainRotWIMU(0) < -prevLStrainRotIMU(0)+jumpThreshold && lStrainRotWIMU(0) > -prevLStrainRotIMU(0)-jumpThreshold)
+    lStrainRotIMUOffset(0) = -lStrainRotIMUOffset(0);
+  if(lStrainRotWIMU(2) < -prevLStrainRotIMU(2)+jumpThreshold && lStrainRotWIMU(2) > -prevLStrainRotIMU(2)-jumpThreshold)
+    lStrainRotIMUOffset(2) = -lStrainRotIMUOffset(2);
   
-  cout << "IMU left foot: " << lort->toString() << endl;
-  cout << "IMU to Earth left: " << lIMUtoEarth.asRPY().toString() << endl;
-  cout << "Left Kinematics; fromIMU: " << lStrainToBase.asRPY().toString() << "; " << lStrainToBaseWIMU.asRPY().toString() << endl;
-  cout << "Left Root to Strain: " << lStrainToBase.inverse().asRPY().toString() << endl;
+//   
+//   cout << "IMU left foot: " << lort->toString() << endl;
+//   cout << "IMU to Earth left: " << lIMUtoEarth.asRPY().toString() << endl;
+//   cout << "Left Kinematics; fromIMU: " << lStrainToBase.asRPY().toString() << "; " << lStrainToBaseWIMU.asRPY().toString() << endl;
+//   cout << "Left Root to Strain: " << lStrainToBase.inverse().asRPY().toString() << endl;
   
   for(unsigned int i = 0; i < 3; i++)
   {
-    fprintf(l_foot_ort_file, "%e, ", lStrainRot(i));
+    fprintf(l_foot_ort_file, "%e, ", lStrainRotOffset(i)*lStrainRot(i));
   }
   fprintf(l_foot_ort_file, "\n");
   for(unsigned int i = 0; i < 3; i++)
   {
-    fprintf(l_foot_ort_imu_file, "%e, ", lStrainRotWIMU(i));
+    fprintf(l_foot_ort_imu_file, "%e, ", lStrainRotIMUOffset(i)*lStrainRotWIMU(i));
   }
   fprintf(l_foot_ort_imu_file, "\n");
   
   rStrainToBase = m_kinDyn.getRelativeTransform("root_link","r_foot_ft_sensor").getRotation();
-  rIMUtoEarth = iDynTree::Rotation::RPY(iDynTree::deg2rad(rort->get(0).asDouble()),iDynTree::deg2rad(rort->get(1).asDouble()),iDynTree::deg2rad(rort->get(2).asDouble()));
+//   rIMUtoEarth = iDynTree::Rotation::RPY(iDynTree::deg2rad(rort->get(0).asDouble()),iDynTree::deg2rad(rort->get(1).asDouble()),iDynTree::deg2rad(rort->get(2).asDouble()));
+  rIMUtoEarth = iDynTree::Rotation::RPY(iDynTree::deg2rad(-rort->get(1).asDouble()),iDynTree::deg2rad(-rort->get(2).asDouble()),iDynTree::deg2rad(-rort->get(0).asDouble()));
   //rIMUtoEarth = rIMUtoEarth.inverse();
   // compute Earth to Base in the first run
   if(j == 0)
@@ -305,21 +335,35 @@ void WorkingThread::computeFeetOrt(int j, yarp::sig::Vector& lleg, yarp::sig::Ve
   rStrainRot = rStrainToBase.asRPY();
   rStrainRotWIMU = rStrainToBaseWIMU.asRPY();
   
-  cout << "IMU right foot: " << rort->toString() << endl;
-  cout << "IMU to Earth right: " << rIMUtoEarth.asRPY().toString() << endl;
-  cout << "Right Kinematics; fromIMU: " << rStrainToBase.asRPY().toString() << "; " << rStrainToBaseWIMU.asRPY().toString() << endl << endl;
-  cout << "Right Root to Strain: " << rStrainToBase.inverse().asRPY().toString() << endl;
+  if(rStrainRot(0) < -prevRStrainRot(0)+jumpThreshold && rStrainRot(0) > -prevRStrainRot(0)-jumpThreshold)
+    rStrainRotOffset(0) = -rStrainRotOffset(0);
+  if(rStrainRot(2) < -prevRStrainRot(2)+jumpThreshold && rStrainRot(2) > -prevRStrainRot(2)-jumpThreshold)
+    rStrainRotOffset(2) = -rStrainRotOffset(2);
+  if(rStrainRotWIMU(0) < -prevRStrainRotIMU(0)+jumpThreshold && lStrainRotWIMU(0) > -prevRStrainRotIMU(0)-jumpThreshold)
+    rStrainRotIMUOffset(0) = -rStrainRotIMUOffset(0);
+  if(rStrainRotWIMU(2) < -prevRStrainRotIMU(2)+jumpThreshold && lStrainRotWIMU(2) > -prevRStrainRotIMU(2)-jumpThreshold)
+    rStrainRotIMUOffset(2) = -rStrainRotIMUOffset(2);
+  
+//   cout << "IMU right foot: " << rort->toString() << endl;
+//   cout << "IMU to Earth right: " << rIMUtoEarth.asRPY().toString() << endl;
+//   cout << "Right Kinematics; fromIMU: " << rStrainToBase.asRPY().toString() << "; " << rStrainToBaseWIMU.asRPY().toString() << endl << endl;
+//   cout << "Right Root to Strain: " << rStrainToBase.inverse().asRPY().toString() << endl;
   
   for(unsigned int i = 0; i < 3; i++)
   {
-    fprintf(r_foot_ort_file, "%e, ", rStrainRot(i));
+    fprintf(r_foot_ort_file, "%e, ", rStrainRotOffset(i)*rStrainRot(i));
   }
   fprintf(r_foot_ort_file, "\n");
   for(unsigned int i = 0; i < 3; i++)
   {
-    fprintf(r_foot_ort_imu_file, "%e, ", rStrainRotWIMU(i));
+    fprintf(r_foot_ort_imu_file, "%e, ", rStrainRotIMUOffset(i)*rStrainRotWIMU(i));
   }
   fprintf(r_foot_ort_imu_file, "\n");
+  
+  prevLStrainRot = lStrainRot;
+  prevLStrainRotIMU = lStrainRotWIMU;
+  prevRStrainRot = rStrainRot;
+  prevRStrainRotIMU = rStrainRotWIMU;
 }
 
 void WorkingThread::dump_data(int j)

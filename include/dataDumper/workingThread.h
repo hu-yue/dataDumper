@@ -92,8 +92,8 @@ public:
     //****** FeetOrtTest ******
     // FeetOrtTest data
     bool                                      feetOrtTest;
-    std::vector<yarp::sig::Vector>             l_foot_ort_ref;
-    std::vector<yarp::sig::Vector>             r_foot_ort_ref;
+    std::vector<yarp::sig::Vector>            l_foot_ort_ref;
+    std::vector<yarp::sig::Vector>            r_foot_ort_ref;
     FILE*                                     l_foot_ort_file;
     FILE*                                     r_foot_ort_file;
     FILE*                                     l_foot_ort_imu_file;
@@ -106,6 +106,16 @@ public:
     iDynTree::Rotation                         imuToStrain; // fixed from CAD https://github.com/robotology-playground/icub-model-generator/issues/91
     iDynTree::Rotation                         lEarthToBase; // computed only in the first run
     iDynTree::Rotation                         rEarthToBase; // computed only in the first run
+    
+    // Orientation jumps
+    iDynTree::Vector3                          prevLStrainRot;
+    iDynTree::Vector3                          prevLStrainRotIMU;
+    iDynTree::Vector3                          prevRStrainRot;
+    iDynTree::Vector3                          prevRStrainRotIMU;
+    iDynTree::Vector3                          lStrainRotOffset;
+    iDynTree::Vector3                          lStrainRotIMUOffset;
+    iDynTree::Vector3                          rStrainRotOffset;
+    iDynTree::Vector3                          rStrainRotIMUOffset;
 
     WorkingThread(int period=5);
     ~WorkingThread();
