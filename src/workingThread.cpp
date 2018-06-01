@@ -291,7 +291,7 @@ void WorkingThread::computeFeetOrt(int j, yarp::sig::Vector& lleg, yarp::sig::Ve
   lStrainRotWIMU = lStrainToBaseWIMU.asRPY();
   
   // check jumps
-  double jumpThreshold = iDynTree::deg2rad(2);
+  double jumpThreshold = iDynTree::deg2rad(20);
   if(lStrainRot(0) < -prevLStrainRot(0)+jumpThreshold && lStrainRot(0) > -prevLStrainRot(0)-jumpThreshold)
     lStrainRotOffset(0) = -lStrainRotOffset(0);
   if(lStrainRot(2) < -prevLStrainRot(2)+jumpThreshold && lStrainRot(2) > -prevLStrainRot(2)-jumpThreshold)
@@ -339,9 +339,9 @@ void WorkingThread::computeFeetOrt(int j, yarp::sig::Vector& lleg, yarp::sig::Ve
     rStrainRotOffset(0) = -rStrainRotOffset(0);
   if(rStrainRot(2) < -prevRStrainRot(2)+jumpThreshold && rStrainRot(2) > -prevRStrainRot(2)-jumpThreshold)
     rStrainRotOffset(2) = -rStrainRotOffset(2);
-  if(rStrainRotWIMU(0) < -prevRStrainRotIMU(0)+jumpThreshold && lStrainRotWIMU(0) > -prevRStrainRotIMU(0)-jumpThreshold)
+  if(rStrainRotWIMU(0) < -prevRStrainRotIMU(0)+jumpThreshold && rStrainRotWIMU(0) > -prevRStrainRotIMU(0)-jumpThreshold)
     rStrainRotIMUOffset(0) = -rStrainRotIMUOffset(0);
-  if(rStrainRotWIMU(2) < -prevRStrainRotIMU(2)+jumpThreshold && lStrainRotWIMU(2) > -prevRStrainRotIMU(2)-jumpThreshold)
+  if(rStrainRotWIMU(2) < -prevRStrainRotIMU(2)+jumpThreshold && rStrainRotWIMU(2) > -prevRStrainRotIMU(2)-jumpThreshold)
     rStrainRotIMUOffset(2) = -rStrainRotIMUOffset(2);
   
 //   cout << "IMU right foot: " << rort->toString() << endl;
