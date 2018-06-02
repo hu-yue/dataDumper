@@ -53,6 +53,7 @@ public:
     bool                                      dump_pwm;
     bool                                      dump_imu;
     bool                                      dump_walking;
+    bool                                      dump_ft;
     
     // all files to write
     // both robot and gazebo
@@ -116,6 +117,17 @@ public:
     iDynTree::Vector3                          lStrainRotIMUOffset;
     iDynTree::Vector3                          rStrainRotOffset;
     iDynTree::Vector3                          rStrainRotIMUOffset;
+    
+    // FT
+    yarp::os::BufferedPort<yarp::os::Bottle>   ft_left_leg;
+    yarp::os::BufferedPort<yarp::os::Bottle>   ft_right_leg;
+    yarp::os::BufferedPort<yarp::os::Bottle>   ft_left_foot;
+    yarp::os::BufferedPort<yarp::os::Bottle>   ft_right_foot;
+    FILE*                                      l_foot_ft_file;
+    FILE*                                      r_foot_ft_file;
+    FILE*                                      l_leg_ft_file;
+    FILE*                                      r_leg_ft_file;
+    
 
     WorkingThread(int period=5);
     ~WorkingThread();

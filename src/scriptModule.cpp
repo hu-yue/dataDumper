@@ -99,6 +99,11 @@ bool scriptModule::configure(ResourceFinder &rf) {
             cout << "##### Dumping walking trajectories" << endl;
             thread.dump_walking = true;
           }
+          if(dumpList->get(i).asString()=="ft")
+          {
+            cout << "##### Dumping FT trajectories" << endl;
+            thread.dump_ft = true;
+          }
         }
       } else
       {
@@ -110,6 +115,7 @@ bool scriptModule::configure(ResourceFinder &rf) {
         thread.dump_pwm = true;
         thread.dump_imu = true;
         thread.dump_walking = true;
+        thread.dump_ft = true;
         cout << "Warning: no dumping part specified, dumping everything." << endl;
       }
     }else
@@ -122,6 +128,7 @@ bool scriptModule::configure(ResourceFinder &rf) {
       thread.dump_pwm = true;
       thread.dump_imu = true;
       thread.dump_walking = true;
+      thread.dump_ft = true;
       cout << "Warning: no dumping part specified, dumping everything." << endl;
     }
     
@@ -154,6 +161,13 @@ bool scriptModule::configure(ResourceFinder &rf) {
         thread.walking_com_file = fopen("walking_com.txt", "w");
         thread.walking_joints_file = fopen("walking_joints.txt", "w");
         thread.walking_feet_file = fopen("walking_feet.txt", "w");
+      }
+      if(thread.dump_ft)
+      {
+        thread.l_foot_ft_file = fopen("l_foot_ft.txt", "w");
+        thread.r_foot_ft_file = fopen("r_foot_ft.txt", "w");
+        thread.l_leg_ft_file = fopen("l_leg_ft.txt", "w");
+        thread.r_leg_ft_file = fopen("r_leg_ft.txt", "w");
       }
     } else if(thread.dump_simulator)
     {

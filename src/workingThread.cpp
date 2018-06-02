@@ -47,6 +47,12 @@ WorkingThread::WorkingThread(int period): RateThread(period)
     l_foot_ort_imu_file = NULL;
     r_foot_ort_file = NULL;
     r_foot_ort_imu_file = NULL;
+    
+    
+    l_foot_ft_file = NULL;
+    r_foot_ft_file = NULL;
+    l_leg_ft_file = NULL;
+    r_leg_ft_file = NULL;
 }
 
 WorkingThread::~WorkingThread()
@@ -72,6 +78,15 @@ WorkingThread::~WorkingThread()
     if(walking_feet_file!=NULL)
       fclose(walking_feet_file);
     
+    if(l_foot_ft_file!=NULL)
+      fclose(l_foot_ft_file);
+    if(r_foot_ft_file!=NULL)
+      fclose(r_foot_ft_file);
+    if(l_leg_ft_file!=NULL)
+      fclose(l_leg_ft_file);
+    if(r_leg_ft_file!=NULL)
+      fclose(r_leg_ft_file);
+    
     if(dump_imu)
     {
       imu_left_foot.close();
@@ -84,6 +99,14 @@ WorkingThread::~WorkingThread()
       walking_joints.close();
       walking_left_foot.close();
       walking_right_foot.close();
+    }
+    
+    if(dump_ft)
+    {
+      ft_left_foot.close();
+      ft_right_foot.close();
+      ft_left_leg.close();
+      ft_right_leg.close();
     }
     
     // Feet ort test
@@ -150,6 +173,35 @@ bool WorkingThread::threadInit()
         walking_joints.close();
       }
     }
+    
+    if(dump_ft)
+    {
+      ft_left_foot.open("/" + name + "/left_foot/measures:i");
+      ft_right_foot.open("/" + name + "/right_foot/measures:i");
+      ft_left_leg.open("/" + name + "/left_leg/measures:i");
+      ft_right_leg.open("/" + name + "/right_leg/measures:i");
+      
+      if(!yarp::os::Network::connect("/" + robotName + "/left_foot/measures:o", "/" + name + "/left_foot/measures:i", carrier)){
+        cout << "Unable to connect to LEFT foot FT port." << endl;
+        return EXIT_FAILURE;
+      }
+      
+      if(!yarp::os::Network::connect("/" + robotName + "/right_foot/measures:o", "/" + name + "/right_foot/measures:i", carrier)){
+        cout << "Unable to connect to RIGHT foot FT port." << endl;
+        return EXIT_FAILURE;
+      }      
+      
+      if(!yarp::os::Network::connect("/" + robotName + "/left_leg/measures:o", "/" + name + "/left_leg/measures:i", carrier)){
+        cout << "Unable to connect to LEFT leg FT port." << endl;
+        return EXIT_FAILURE;
+      }
+      
+      if(!yarp::os::Network::connect("/" + robotName + "/right_leg/measures:o", "/" + name + "/right_leg/measures:i", carrier)){
+        cout << "Unable to connect to RIGHT leg FT port." << endl;
+        return EXIT_FAILURE;
+      }
+    }
+    
     
     // acquire pid and motor data
     gear_ratio_ll.resize(6);
@@ -380,6 +432,12 @@ void WorkingThread::dump_data(int j)
     yarp::os::Bottle* rmagn;
     yarp::os::Bottle* rort;
     
+    // FT
+    yarp::os::Bottle* ft_l_foot_bottle = NULL;
+    yarp::os::Bottle* ft_r_foot_bottle = NULL;
+    yarp::os::Bottle* ft_l_leg_bottle = NULL;
+    yarp::os::Bottle* ft_r_leg_bottle = NULL;
+    
     // Walking data vectors
     yarp::sig::Vector walk_com_vec;
     yarp::sig::Vector walk_left_foot_vec;
@@ -453,6 +511,51 @@ void WorkingThread::dump_data(int j)
         fprintf(imu_data_file, "%e, ", rort->get(i).asDouble());
       }
       fprintf(imu_data_file, "%e\n", rort->get(2).asDouble());
+    }
+    
+    if(dump_ft)
+    {
+      
+      // we want to read the bottles 4 and 5
+      if(ft_left_foot.read(false)->size() < 6 || ft_left_leg.read(false)->size() < 6 )
+      {
+        cout << "Error in reading the FT on LEFT leg" << endl;
+      }
+      if(ft_right_foot.read(false)->size() < 6 || ft_right_leg.read(false)->size() < 6 )
+      {
+        cout << "Error in reading the FT on RIGHT leg" << endl;
+      }
+      
+      ft_l_foot_bottle = ft_left_foot.read(false)->get(5).asList()->get(0).asList()->get(0).asList();
+      ft_r_foot_bottle = ft_right_foot.read(false)->get(5).asList()->get(0).asList()->get(0).asList();
+      ft_l_leg_bottle = ft_left_leg.read(false)->get(5).asList()->get(0).asList()->get(0).asList();
+      ft_r_leg_bottle = ft_right_leg.read(false)->get(5).asList()->get(0).asList()->get(0).asList();
+      
+      fprintf(l_foot_ft_file, "%e, ", ft_left_foot.read(false)->get(6).asList()->get(0).asList()->get(0).asList()->get(0).asDouble());
+      for(unsigned int i = 0; i < 5; i++)
+      {
+        fprintf(l_foot_ft_file, "%e, ", ft_l_foot_bottle->get(i).asDouble());
+      }
+      fprintf(l_foot_ft_file, "%e\n", ft_l_foot_bottle->get(5).asDouble());
+      fprintf(r_foot_ft_file, "%e, ", ft_right_foot.read(false)->get(6).asList()->get(0).asList()->get(0).asList()->get(0).asDouble());
+      for(unsigned int i = 0; i < 5; i++)
+      {
+        fprintf(r_foot_ft_file, "%e, ", ft_r_foot_bottle->get(i).asDouble());
+      }
+      fprintf(r_foot_ft_file, "%e\n", ft_r_foot_bottle->get(5).asDouble());
+      
+      fprintf(l_leg_ft_file, "%e, ", ft_left_leg.read(false)->get(6).asList()->get(0).asList()->get(0).asList()->get(0).asDouble());
+      for(unsigned int i = 0; i < 5; i++)
+      {
+        fprintf(l_leg_ft_file, "%e, ", ft_l_leg_bottle->get(i).asDouble());
+      }
+      fprintf(l_leg_ft_file, "%e\n", ft_l_leg_bottle->get(5).asDouble());
+      fprintf(r_leg_ft_file, "%e, ", ft_right_leg.read(false)->get(6).asList()->get(0).asList()->get(0).asList()->get(0).asDouble());
+      for(unsigned int i = 0; i < 5; i++)
+      {
+        fprintf(r_leg_ft_file, "%e, ", ft_r_leg_bottle->get(i).asDouble());
+      }
+      fprintf(r_leg_ft_file, "%e\n", ft_r_leg_bottle->get(5).asDouble());
     }
     
     if(dump_enc || feetOrtTest)
