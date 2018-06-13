@@ -109,6 +109,11 @@ WorkingThread::~WorkingThread()
       ft_right_leg.close();
     }
     
+    if(dump_dcmwalking)
+    {
+      walking_base.close();
+    }
+    
     // Feet ort test
     if(l_foot_ort_file!=NULL)
       fclose(l_foot_ort_file);
@@ -132,15 +137,15 @@ bool WorkingThread::threadInit()
     
     if(dump_imu)
     {
-      imu_left_foot.open("/" + name + "/left_leg/imu/measures:i");
-      imu_right_foot.open("/" + name + "/right_leg/imu/measures:i");
+      imu_left_foot.open("/" + name + "/left_foot/imu/measures:i");
+      imu_right_foot.open("/" + name + "/right_foot/imu/measures:i");
       
-      if(!yarp::os::Network::connect("/" + robotName + "/left_leg/imu/measures:o", "/" + name + "/left_leg/imu/measures:i", carrier)){
-        cout << "Unable to connect to LEFT leg IMU port." << endl;
+      if(!yarp::os::Network::connect("/" + robotName + "/left_foot/imu/measures:o", "/" + name + "/left_foot/imu/measures:i", carrier)){
+        cout << "Unable to connect to LEFT foot IMU port." << endl;
         return EXIT_FAILURE;
       }
-      if(!yarp::os::Network::connect("/" + robotName + "/right_leg/imu/measures:o", "/" + name + "/right_leg/imu/measures:i", carrier)){
-        cout << "Unable to connect to RIGHT leg IMU port." << endl;
+      if(!yarp::os::Network::connect("/" + robotName + "/right_foot/imu/measures:o", "/" + name + "/right_foot/imu/measures:i", carrier)){
+        cout << "Unable to connect to RIGHT foot IMU port." << endl;
         return EXIT_FAILURE;
       }
     }
@@ -198,6 +203,15 @@ bool WorkingThread::threadInit()
       
       if(!yarp::os::Network::connect("/" + robotName + "/right_leg/measures:o", "/" + name + "/right_leg/measures:i", carrier)){
         cout << "Unable to connect to RIGHT leg FT port." << endl;
+        return EXIT_FAILURE;
+      }
+    }
+    
+    if(dump_dcmwalking)
+    {
+      walking_base.open("/" + name + "/walking_base:i");
+      if(!yarp::os::Network::connect("/" + robotName + "/walking_base:o", "/" + name + "/walking_base:i", carrier)){
+        cout << "Unable to connect to walking base port." << endl;
         return EXIT_FAILURE;
       }
     }
@@ -281,6 +295,12 @@ bool WorkingThread::threadInit()
         rStrainRotOffset(i) = 1;
         rStrainRotIMUOffset(i) = 1;
       }
+      
+      if(dump_dcmwalking)
+        current_base = "l_sole";// default walking base is left foot
+      else
+        current_base = "root_link";
+      base_switch = false;
     }
     
     return true;
@@ -325,12 +345,24 @@ void WorkingThread::computeFeetOrt(int j, yarp::sig::Vector& lleg, yarp::sig::Ve
   iDynTree::Position rStrainPosWIMU;
   iDynTree::Vector3 rStrainRotWIMU;
   
-  lStrainToBase = m_kinDyn.getRelativeTransform("root_link","l_foot_ft_sensor").getRotation();
-  //lIMUtoEarth = iDynTree::Rotation::RPY(iDynTree::deg2rad(lort->get(0).asDouble()),iDynTree::deg2rad(lort->get(1).asDouble()),iDynTree::deg2rad(lort->get(2).asDouble()));
+  // change base according to contacts, whenever base changes, change also lEarthToBase
+  if(dump_dcmwalking)
+  {
+    if(current_base.compare("l_sole") && walking_base.read(false)->operator[](1) == 1)
+    {
+      base_switch = true;
+      current_base = "r_sole";
+    } else if(current_base.compare("r_sole") && walking_base.read(false)->operator[](0) == 1)
+    {
+      base_switch = true;
+      current_base = "l_sole";
+    }
+  }
+  
+  lStrainToBase = m_kinDyn.getRelativeTransform(current_base,"l_foot_ft_sensor").getRotation();
   lIMUtoEarth = iDynTree::Rotation::RPY(iDynTree::deg2rad(-lort->get(1).asDouble()),iDynTree::deg2rad(-lort->get(2).asDouble()),iDynTree::deg2rad(-lort->get(0).asDouble()));
-  //lIMUtoEarth = lIMUtoEarth.inverse();
   // compute Earth to Base in the first run
-  if(j == 0)
+  if(j == 0 || base_switch)
   {
     lEarthToBase = lStrainToBase*imuToStrain*lIMUtoEarth.inverse();
   }
@@ -338,7 +370,7 @@ void WorkingThread::computeFeetOrt(int j, yarp::sig::Vector& lleg, yarp::sig::Ve
   
   lIMUtoEarthKin = lEarthToBase.inverse()*lStrainToBase*imuToStrain;
   
-  lStrainPos = m_kinDyn.getRelativeTransform("root_link","l_foot_ft_sensor").getPosition();
+  lStrainPos = m_kinDyn.getRelativeTransform(current_base,"l_foot_ft_sensor").getPosition();
   lStrainRot = lStrainToBase.asRPY();
   lStrainRotWIMU = lStrainToBaseWIMU.asRPY();
   
@@ -370,12 +402,10 @@ void WorkingThread::computeFeetOrt(int j, yarp::sig::Vector& lleg, yarp::sig::Ve
   }
   fprintf(l_foot_ort_imu_file, "\n");
   
-  rStrainToBase = m_kinDyn.getRelativeTransform("root_link","r_foot_ft_sensor").getRotation();
-//   rIMUtoEarth = iDynTree::Rotation::RPY(iDynTree::deg2rad(rort->get(0).asDouble()),iDynTree::deg2rad(rort->get(1).asDouble()),iDynTree::deg2rad(rort->get(2).asDouble()));
+  rStrainToBase = m_kinDyn.getRelativeTransform(current_base,"r_foot_ft_sensor").getRotation();
   rIMUtoEarth = iDynTree::Rotation::RPY(iDynTree::deg2rad(-rort->get(1).asDouble()),iDynTree::deg2rad(-rort->get(2).asDouble()),iDynTree::deg2rad(-rort->get(0).asDouble()));
-  //rIMUtoEarth = rIMUtoEarth.inverse();
   // compute Earth to Base in the first run
-  if(j == 0)
+  if(j == 0 || base_switch)
   {
     rEarthToBase = rStrainToBase*imuToStrain*rIMUtoEarth.inverse();
   }
@@ -383,7 +413,7 @@ void WorkingThread::computeFeetOrt(int j, yarp::sig::Vector& lleg, yarp::sig::Ve
   
   rIMUtoEarthKin = rEarthToBase.inverse()*rStrainToBase*imuToStrain;
   
-  rStrainPos = m_kinDyn.getRelativeTransform("root_link","r_foot_ft_sensor").getPosition();
+  rStrainPos = m_kinDyn.getRelativeTransform(current_base,"r_foot_ft_sensor").getPosition();
   rStrainRot = rStrainToBase.asRPY();
   rStrainRotWIMU = rStrainToBaseWIMU.asRPY();
   
@@ -416,6 +446,7 @@ void WorkingThread::computeFeetOrt(int j, yarp::sig::Vector& lleg, yarp::sig::Ve
   prevLStrainRotIMU = lStrainRotWIMU;
   prevRStrainRot = rStrainRot;
   prevRStrainRotIMU = rStrainRotWIMU;
+  base_switch = false;
 }
 
 void WorkingThread::dump_data(int j)

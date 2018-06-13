@@ -61,7 +61,7 @@ int main(int argc, char *argv[])
         cout << "\t--robot              <robotname>:  robot name"          << endl;
         cout << "\t--sim                if using Gazebo" << endl;
         cout << "\t--period             <period>: the period in ms of the internal thread (default 5)"  << endl;
-        cout << "\t--dump               <what to dump>: encoders, mencoders, encoder speeds, currents, pwm, imu, walking, ft" << endl;
+        cout << "\t--dump               <what to dump>: encoders, mencoders, encoder speeds, currents, pwm, imu, walking, ft, dcmwalking" << endl;
         cout << "\t--carrier            <carrie>: upd, tcp" << endl;
         cout << "\t--feetOrtTest        " << endl;
         cout << "\t--model              <model.urdf>" << endl;

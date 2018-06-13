@@ -54,6 +54,7 @@ public:
     bool                                      dump_imu;
     bool                                      dump_walking;
     bool                                      dump_ft;
+    bool                                      dump_dcmwalking;
     
     // all files to write
     // both robot and gazebo
@@ -79,10 +80,14 @@ public:
     FILE*                                     walking_feet_file;
     FILE*                                     walking_com_file;
     FILE*                                     walking_joints_file;
-        
     
     yarp::os::BufferedPort<yarp::os::Bottle>  imu_left_foot;
     yarp::os::BufferedPort<yarp::os::Bottle>  imu_right_foot;
+    
+    // DCM walking
+    std::string                               current_base;
+    bool                                      base_switch;
+    yarp::os::BufferedPort<yarp::sig::Vector> walking_base;
     
     // walking ports
     yarp::os::BufferedPort<yarp::sig::Vector>  walking_left_foot;

@@ -104,6 +104,11 @@ bool scriptModule::configure(ResourceFinder &rf) {
             cout << "##### Dumping FT trajectories" << endl;
             thread.dump_ft = true;
           }
+          if(dumpList->get(i).asString()=="dcmwalking")
+          {
+            cout << "##### Dumping DCM walking trajectories" << endl;
+            thread.dump_dcmwalking = true;
+          }
         }
       } else
       {
