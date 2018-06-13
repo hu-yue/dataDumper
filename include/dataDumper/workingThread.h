@@ -98,8 +98,6 @@ public:
     //****** FeetOrtTest ******
     // FeetOrtTest data
     bool                                      feetOrtTest;
-    std::vector<yarp::sig::Vector>            l_foot_ort_ref;
-    std::vector<yarp::sig::Vector>            r_foot_ort_ref;
     FILE*                                     l_foot_ort_file;
     FILE*                                     r_foot_ort_file;
     FILE*                                     l_foot_ort_imu_file;

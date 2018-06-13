@@ -271,7 +271,14 @@ bool WorkingThread::threadInit()
       legJoints[11] = "r_ankle_roll";
       model_loader.loadReducedModelFromFullModel(model_loader.model(),legJoints);
       m_kinDyn.loadRobotModel(model_loader.model());
-      m_kinDyn.setFloatingBase("root_link");
+      
+      if(dump_dcmwalking || dump_walking)
+        current_base = "l_sole";// default walking base is left foot
+      else
+        current_base = "root_link";
+        
+        
+      m_kinDyn.setFloatingBase(current_base);
       cout << "Degrees of freedom: " << m_kinDyn.getNrOfDegreesOfFreedom() << endl;
       
       // set imuToStrain
@@ -295,11 +302,6 @@ bool WorkingThread::threadInit()
         rStrainRotOffset(i) = 1;
         rStrainRotIMUOffset(i) = 1;
       }
-      
-      if(dump_dcmwalking)
-        current_base = "l_sole";// default walking base is left foot
-      else
-        current_base = "root_link";
       base_switch = false;
     }
     
@@ -357,6 +359,24 @@ void WorkingThread::computeFeetOrt(int j, yarp::sig::Vector& lleg, yarp::sig::Ve
       base_switch = true;
       current_base = "l_sole";
     }
+    m_kinDyn.setFloatingBase(current_base);
+  }
+  
+  // change base according to contacts, whenever base changes, change also lEarthToBase
+  if(dump_walking)
+  {
+    if(walking_right_foot.read(false)->operator[](1) == 1 && walking_left_foot.read(false)->operator[](1) == 1)
+      base_switch = false;
+    else if(current_base.compare("l_sole") && walking_right_foot.read(false)->operator[](1) == 1)
+    {
+      base_switch = true;
+      current_base = "r_sole";
+    } else if(current_base.compare("r_sole") && walking_left_foot.read(false)->operator[](1) == 1)
+    {
+      base_switch = true;
+      current_base = "l_sole";
+    }
+    m_kinDyn.setFloatingBase(current_base);
   }
   
   lStrainToBase = m_kinDyn.getRelativeTransform(current_base,"l_foot_ft_sensor").getRotation();
@@ -635,8 +655,8 @@ void WorkingThread::dump_data(int j)
     {
       walk_com_vec =  *walking_com.read();
       walk_joints_vec =  *walking_joints.read();
-      walk_left_foot_vec =  *walking_left_foot.read();
-      walk_right_foot_vec =  *walking_right_foot.read();
+      //walk_left_foot_vec =  *walking_left_foot.read();
+      //walk_right_foot_vec =  *walking_right_foot.read();
       
       for(unsigned int i = 0; i < walk_com_vec.size(); i++)
       {
@@ -650,15 +670,15 @@ void WorkingThread::dump_data(int j)
       }
       fprintf(walking_joints_file, "\n");
       
-      for(unsigned int i = 0; i < walk_left_foot_vec.size(); i++)
-      {
-        fprintf(walking_feet_file, "%e, ", walk_left_foot_vec(i));
-      }
-      for(unsigned int i = 0; i < walk_right_foot_vec.size(); i++)
-      {
-        fprintf(walking_feet_file, "%e, ", walk_right_foot_vec(i));
-      }
-      fprintf(walking_feet_file, "\n");
+//       for(unsigned int i = 0; i < walk_left_foot_vec.size(); i++)
+//       {
+//         fprintf(walking_feet_file, "%e, ", walk_left_foot_vec(i));
+//       }
+//       for(unsigned int i = 0; i < walk_right_foot_vec.size(); i++)
+//       {
+//         fprintf(walking_feet_file, "%e, ", walk_right_foot_vec(i));
+//       }
+//       fprintf(walking_feet_file, "\n");
     }
     
     if(dump_robot)

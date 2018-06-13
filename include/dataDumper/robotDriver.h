@@ -41,10 +41,6 @@ public:
     yarp::dev::IMotor           *imot_ll;
     yarp::dev::IMotor           *imot_rl;
     yarp::dev::IMotor           *imot_to;
-    
-    // FeetOrtTest
-    yarp::dev::IControlMode2    *ictrl_ll;
-    yarp::dev::IControlMode2    *ictrl_rl;
 
 public:
     robotDriver();

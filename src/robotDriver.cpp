@@ -28,10 +28,6 @@ robotDriver::robotDriver() {
     imot_rl = 0;
     imot_to = 0;
     
-    //FeetOrtTest
-    ictrl_ll = 0;
-    ictrl_rl = 0;
-    
     verbose = 1;
     connected=false;
     iCub::iDyn::version_tag tag;
