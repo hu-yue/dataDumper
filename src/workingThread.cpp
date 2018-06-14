@@ -361,8 +361,9 @@ void WorkingThread::computeFeetOrt(int j, yarp::sig::Vector& lleg, yarp::sig::Ve
   // update base pos wrt world
   if(base_switch)
   {
+    w_H_b = m_kinDyn.getWorldTransform(current_base);
     m_kinDyn.setFloatingBase(current_base);
-    w_H_b = m_kinDyn.getWorldBaseTransform();
+    m_kinDyn.setRobotState(w_H_b, legsState, iDynTree::Twist::Zero(), legsStateVel, gravity);
     cout << "Switched with w_H_b: \n" << w_H_b.toString() << endl;
   }
   
@@ -393,7 +394,7 @@ void WorkingThread::computeFeetOrt(int j, yarp::sig::Vector& lleg, yarp::sig::Ve
   lStrainToBase = m_kinDyn.getWorldTransform("l_foot_ft_sensor").getRotation();
   lIMUtoEarth = iDynTree::Rotation::RPY(iDynTree::deg2rad(-lort->get(1).asDouble()),iDynTree::deg2rad(-lort->get(2).asDouble()),iDynTree::deg2rad(-lort->get(0).asDouble()));
   // compute Earth to Base in the first run
-  if(j == 0 || base_switch)
+  if(j == 0)// || base_switch)
   {
     lEarthToBase = lStrainToBase*imuToStrain*lIMUtoEarth.inverse();
   }
@@ -437,7 +438,7 @@ void WorkingThread::computeFeetOrt(int j, yarp::sig::Vector& lleg, yarp::sig::Ve
   rStrainToBase = m_kinDyn.getWorldTransform("r_foot_ft_sensor").getRotation();
   rIMUtoEarth = iDynTree::Rotation::RPY(iDynTree::deg2rad(-rort->get(1).asDouble()),iDynTree::deg2rad(-rort->get(2).asDouble()),iDynTree::deg2rad(-rort->get(0).asDouble()));
   // compute Earth to Base in the first run
-  if(j == 0 || base_switch)
+  if(j == 0)// || base_switch)
   {
     rEarthToBase = rStrainToBase*imuToStrain*rIMUtoEarth.inverse();
   }
