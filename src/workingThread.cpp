@@ -566,7 +566,6 @@ void WorkingThread::dump_data(int j)
     
     if(dump_ft)
     {
-      
       // we want to read the bottles 4 and 5
       if(ft_left_foot.read(false)->size() < 6 || ft_left_leg.read(false)->size() < 6 )
       {
@@ -627,6 +626,26 @@ void WorkingThread::dump_data(int j)
         fprintf(enc_data_file, "%e\t", data_rl[i]);
       }
       fprintf(enc_data_file, "\n");
+      
+      // WARNING workaround
+      if(dump_ft)
+      {
+        double ft_threshold = 50;
+        if(ft_r_foot_bottle->get(2).asDouble() > ft_threshold && ft_r_foot_bottle->get(2).asDouble() > ft_threshold)
+          base_switch = false;
+        else if(current_base.compare("l_sole") && ft_r_foot_bottle->get(2).asDouble() > ft_threshold)
+        {
+          base_switch = true;
+          current_base = "r_sole";
+          cout << "Switching to right base" << endl;
+        } else if(current_base.compare("r_sole") && ft_l_foot_bottle->get(2).asDouble() > ft_threshold)
+        {
+          base_switch = true;
+          current_base = "l_sole";
+          cout << "Switching to left base" << endl;
+        }
+        m_kinDyn.setFloatingBase(current_base);
+      }
       
       if(feetOrtTest && dump_imu)
         computeFeetOrt(j,data_ll,data_rl,lort,rort);
