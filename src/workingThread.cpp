@@ -272,11 +272,15 @@ bool WorkingThread::threadInit()
       model_loader.loadReducedModelFromFullModel(model_loader.model(),legJoints);
       m_kinDyn.loadRobotModel(model_loader.model());
       
-      if(dump_dcmwalking || dump_walking)
+      if(dump_dcmwalking || dump_walking || dump_ft)
+      {
         current_base = "l_sole";// default walking base is left foot
-      else
+        w_H_b = iDynTree::Transform::Identity();
+      } else
+      {
         current_base = "root_link";
-        
+        w_H_b = iDynTree::Transform::Identity();
+      }        
         
       m_kinDyn.setFloatingBase(current_base);
       cout << "Degrees of freedom: " << m_kinDyn.getNrOfDegreesOfFreedom() << endl;
@@ -322,7 +326,45 @@ void WorkingThread::computeFeetOrt(int j, yarp::sig::Vector& lleg, yarp::sig::Ve
     legsState(i+6) = iDynTree::deg2rad(rleg[i]);
   }
   
-  m_kinDyn.setRobotState(iDynTree::Transform::Identity(), legsState, iDynTree::Twist::Zero(), legsStateVel, gravity);
+  // change base according to contacts, whenever base changes, change also lEarthToBase
+  if(dump_dcmwalking)
+  {
+    if(current_base.compare("l_sole") && walking_base.read(false)->operator[](1) == 1)
+    {
+      base_switch = true;
+      current_base = "r_sole";
+    } else if(current_base.compare("r_sole") && walking_base.read(false)->operator[](0) == 1)
+    {
+      base_switch = true;
+      current_base = "l_sole";
+    }
+  }
+  
+  // change base according to contacts, whenever base changes, change also lEarthToBase
+  if(dump_walking)
+  {
+    if(walking_right_foot.read(false)->operator[](1) == 1 && walking_left_foot.read(false)->operator[](1) == 1)
+      base_switch = false;
+    else if(current_base.compare("l_sole") && walking_right_foot.read(false)->operator[](1) == 1)
+    {
+      base_switch = true;
+      current_base = "r_sole";
+    } else if(current_base.compare("r_sole") && walking_left_foot.read(false)->operator[](1) == 1)
+    {
+      base_switch = true;
+      current_base = "l_sole";
+    }
+  }
+  
+  m_kinDyn.setRobotState(w_H_b, legsState, iDynTree::Twist::Zero(), legsStateVel, gravity);
+  
+  // update base pos wrt world
+  if(base_switch)
+  {
+    m_kinDyn.setFloatingBase(current_base);
+    w_H_b = m_kinDyn.getWorldBaseTransform();
+    cout << "Switched with w_H_b: \n" << w_H_b.toString() << endl;
+  }
   
   iDynTree::Vector3 posZero;
   posZero.zero();
@@ -347,39 +389,8 @@ void WorkingThread::computeFeetOrt(int j, yarp::sig::Vector& lleg, yarp::sig::Ve
   iDynTree::Position rStrainPosWIMU;
   iDynTree::Vector3 rStrainRotWIMU;
   
-  // change base according to contacts, whenever base changes, change also lEarthToBase
-  if(dump_dcmwalking)
-  {
-    if(current_base.compare("l_sole") && walking_base.read(false)->operator[](1) == 1)
-    {
-      base_switch = true;
-      current_base = "r_sole";
-    } else if(current_base.compare("r_sole") && walking_base.read(false)->operator[](0) == 1)
-    {
-      base_switch = true;
-      current_base = "l_sole";
-    }
-    m_kinDyn.setFloatingBase(current_base);
-  }
-  
-  // change base according to contacts, whenever base changes, change also lEarthToBase
-  if(dump_walking)
-  {
-    if(walking_right_foot.read(false)->operator[](1) == 1 && walking_left_foot.read(false)->operator[](1) == 1)
-      base_switch = false;
-    else if(current_base.compare("l_sole") && walking_right_foot.read(false)->operator[](1) == 1)
-    {
-      base_switch = true;
-      current_base = "r_sole";
-    } else if(current_base.compare("r_sole") && walking_left_foot.read(false)->operator[](1) == 1)
-    {
-      base_switch = true;
-      current_base = "l_sole";
-    }
-    m_kinDyn.setFloatingBase(current_base);
-  }
-  
-  lStrainToBase = m_kinDyn.getRelativeTransform(current_base,"l_foot_ft_sensor").getRotation();
+  //   lStrainToBase = m_kinDyn.getRelativeTransform(current_base,"l_foot_ft_sensor").getRotation();
+  lStrainToBase = m_kinDyn.getWorldTransform("l_foot_ft_sensor").getRotation();
   lIMUtoEarth = iDynTree::Rotation::RPY(iDynTree::deg2rad(-lort->get(1).asDouble()),iDynTree::deg2rad(-lort->get(2).asDouble()),iDynTree::deg2rad(-lort->get(0).asDouble()));
   // compute Earth to Base in the first run
   if(j == 0 || base_switch)
@@ -422,7 +433,8 @@ void WorkingThread::computeFeetOrt(int j, yarp::sig::Vector& lleg, yarp::sig::Ve
   }
   fprintf(l_foot_ort_imu_file, "\n");
   
-  rStrainToBase = m_kinDyn.getRelativeTransform(current_base,"r_foot_ft_sensor").getRotation();
+  //   rStrainToBase = m_kinDyn.getRelativeTransform(current_base,"r_foot_ft_sensor").getRotation();
+  rStrainToBase = m_kinDyn.getWorldTransform("r_foot_ft_sensor").getRotation();
   rIMUtoEarth = iDynTree::Rotation::RPY(iDynTree::deg2rad(-rort->get(1).asDouble()),iDynTree::deg2rad(-rort->get(2).asDouble()),iDynTree::deg2rad(-rort->get(0).asDouble()));
   // compute Earth to Base in the first run
   if(j == 0 || base_switch)
@@ -644,7 +656,6 @@ void WorkingThread::dump_data(int j)
           current_base = "l_sole";
           cout << "Switching to left base" << endl;
         }
-        m_kinDyn.setFloatingBase(current_base);
       }
       
       if(feetOrtTest && dump_imu)

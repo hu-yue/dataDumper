@@ -110,6 +110,7 @@ public:
     iDynTree::Rotation                         imuToStrain; // fixed from CAD https://github.com/robotology-playground/icub-model-generator/issues/91
     iDynTree::Rotation                         lEarthToBase; // computed only in the first run
     iDynTree::Rotation                         rEarthToBase; // computed only in the first run
+    iDynTree::Transform                        w_H_b;
     
     // Orientation jumps
     iDynTree::Vector3                          prevLStrainRot;
