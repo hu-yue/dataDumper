@@ -95,6 +95,10 @@ public:
     yarp::os::BufferedPort<yarp::sig::Vector>  walking_joints;
     yarp::os::BufferedPort<yarp::sig::Vector>  walking_com;
     
+    
+    yarp::os::BufferedPort<yarp::sig::Vector>  wbd_left_foot;
+    yarp::os::BufferedPort<yarp::sig::Vector>  wbd_right_foot;
+    
     //****** FeetOrtTest ******
     // FeetOrtTest data
     bool                                      feetOrtTest;

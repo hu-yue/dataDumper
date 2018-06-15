@@ -107,6 +107,8 @@ WorkingThread::~WorkingThread()
       ft_right_foot.close();
       ft_left_leg.close();
       ft_right_leg.close();
+      wbd_left_foot.close();
+      wbd_right_foot.close();
     }
     
     if(dump_dcmwalking)
@@ -186,6 +188,9 @@ bool WorkingThread::threadInit()
       ft_left_leg.open("/" + name + "/left_leg/measures:i");
       ft_right_leg.open("/" + name + "/right_leg/measures:i");
       
+      wbd_left_foot.open("/" + name + "/left_foot/wbdwrench:i");
+      wbd_right_foot.open("/" + name + "/right_foot/wbdwrench:i");
+      
       if(!yarp::os::Network::connect("/" + robotName + "/left_foot/measures:o", "/" + name + "/left_foot/measures:i", carrier)){
         cout << "Unable to connect to LEFT foot FT port." << endl;
         return EXIT_FAILURE;
@@ -203,6 +208,16 @@ bool WorkingThread::threadInit()
       
       if(!yarp::os::Network::connect("/" + robotName + "/right_leg/measures:o", "/" + name + "/right_leg/measures:i", carrier)){
         cout << "Unable to connect to RIGHT leg FT port." << endl;
+        return EXIT_FAILURE;
+      }
+      
+      if(!yarp::os::Network::connect("/wholeBodyDynamics/left_foot/cartesianEndEffectorWrench:o", "/" + name + "/left_foot/wbdwrench:i", carrier)){
+        cout << "Unable to connect to RIGHT leg WBD FT port." << endl;
+        return EXIT_FAILURE;
+      }
+      
+      if(!yarp::os::Network::connect("/wholeBodyDynamics/right_foot/cartesianEndEffectorWrench:o", "/" + name + "/right_foot/wbdwrench:i", carrier)){
+        cout << "Unable to connect to RIGHT leg WBD FT port." << endl;
         return EXIT_FAILURE;
       }
     }
@@ -301,6 +316,14 @@ bool WorkingThread::threadInit()
       
       for(int i = 0; i < 3; i++)
       {
+        prevLStrainRot(i) = iDynTree::deg2rad(180);
+        prevLStrainRotIMU(i) = iDynTree::deg2rad(180);
+        prevRStrainRot(i) = iDynTree::deg2rad(180);
+        prevRStrainRotIMU(i) = iDynTree::deg2rad(180);
+      }
+      
+      for(int i = 0; i < 3; i++)
+      {
         lStrainRotOffset(i) = 1;
         lStrainRotIMUOffset(i) = 1;
         rStrainRotOffset(i) = 1;
@@ -329,11 +352,11 @@ void WorkingThread::computeFeetOrt(int j, yarp::sig::Vector& lleg, yarp::sig::Ve
   // change base according to contacts, whenever base changes, change also lEarthToBase
   if(dump_dcmwalking)
   {
-    if(current_base.compare("l_sole") && walking_base.read(false)->operator[](1) == 1)
+    if(current_base.compare("l_sole")==0 && walking_base.read(false)->operator[](1) == 1)
     {
       base_switch = true;
       current_base = "r_sole";
-    } else if(current_base.compare("r_sole") && walking_base.read(false)->operator[](0) == 1)
+    } else if(current_base.compare("r_sole")==0 && walking_base.read(false)->operator[](0) == 1)
     {
       base_switch = true;
       current_base = "l_sole";
@@ -345,11 +368,11 @@ void WorkingThread::computeFeetOrt(int j, yarp::sig::Vector& lleg, yarp::sig::Ve
   {
     if(walking_right_foot.read(false)->operator[](1) == 1 && walking_left_foot.read(false)->operator[](1) == 1)
       base_switch = false;
-    else if(current_base.compare("l_sole") && walking_right_foot.read(false)->operator[](1) == 1)
+    else if(current_base.compare("l_sole")==0 && walking_right_foot.read(false)->operator[](1) == 1)
     {
       base_switch = true;
       current_base = "r_sole";
-    } else if(current_base.compare("r_sole") && walking_left_foot.read(false)->operator[](1) == 1)
+    } else if(current_base.compare("r_sole")==0 && walking_left_foot.read(false)->operator[](1) == 1)
     {
       base_switch = true;
       current_base = "l_sole";
@@ -364,6 +387,7 @@ void WorkingThread::computeFeetOrt(int j, yarp::sig::Vector& lleg, yarp::sig::Ve
     w_H_b = m_kinDyn.getWorldTransform(current_base);
     m_kinDyn.setFloatingBase(current_base);
     m_kinDyn.setRobotState(w_H_b, legsState, iDynTree::Twist::Zero(), legsStateVel, gravity);
+    cout << "Switching base to " << current_base;
     cout << "Switched with w_H_b: \n" << w_H_b.toString() << endl;
   }
   
@@ -406,16 +430,44 @@ void WorkingThread::computeFeetOrt(int j, yarp::sig::Vector& lleg, yarp::sig::Ve
   lStrainRot = lStrainToBase.asRPY();
   lStrainRotWIMU = lStrainToBaseWIMU.asRPY();
   
+  // adjust signs for the first run
+  if(j == 0)
+  {
+    for(int i = 0; i < 3; i++)
+    {
+      if(lStrainRot(i) < 0)
+        prevLStrainRot(i) = -prevLStrainRot(i);
+      if(lStrainRotWIMU(i) < 0)
+        prevLStrainRotIMU(i) = -prevLStrainRotIMU(i);
+      if(rStrainRot(i) < 0)
+        prevRStrainRot(i) = -prevRStrainRot(i);
+      if(rStrainRotWIMU(i) < 0)
+        prevRStrainRotIMU(i) = -prevRStrainRotIMU(i);
+    }
+  }
+  
   // check jumps
   double jumpThreshold = iDynTree::deg2rad(20);
   if(lStrainRot(0) < -prevLStrainRot(0)+jumpThreshold && lStrainRot(0) > -prevLStrainRot(0)-jumpThreshold)
+  {
     lStrainRotOffset(0) = -lStrainRotOffset(0);
+    prevLStrainRot(0) = -prevLStrainRot(0);
+  }
   if(lStrainRot(2) < -prevLStrainRot(2)+jumpThreshold && lStrainRot(2) > -prevLStrainRot(2)-jumpThreshold)
+  {
     lStrainRotOffset(2) = -lStrainRotOffset(2);
+    prevLStrainRot(2) = -prevLStrainRot(2);
+  }
   if(lStrainRotWIMU(0) < -prevLStrainRotIMU(0)+jumpThreshold && lStrainRotWIMU(0) > -prevLStrainRotIMU(0)-jumpThreshold)
+  {
     lStrainRotIMUOffset(0) = -lStrainRotIMUOffset(0);
+    prevLStrainRotIMU(0) = -prevLStrainRotIMU(0);
+  }
   if(lStrainRotWIMU(2) < -prevLStrainRotIMU(2)+jumpThreshold && lStrainRotWIMU(2) > -prevLStrainRotIMU(2)-jumpThreshold)
+  {
     lStrainRotIMUOffset(2) = -lStrainRotIMUOffset(2);
+    prevLStrainRotIMU(2) = -prevLStrainRotIMU(2);
+  }
   
 //   
 //   cout << "IMU left foot: " << lort->toString() << endl;
@@ -451,13 +503,25 @@ void WorkingThread::computeFeetOrt(int j, yarp::sig::Vector& lleg, yarp::sig::Ve
   rStrainRotWIMU = rStrainToBaseWIMU.asRPY();
   
   if(rStrainRot(0) < -prevRStrainRot(0)+jumpThreshold && rStrainRot(0) > -prevRStrainRot(0)-jumpThreshold)
+  {
     rStrainRotOffset(0) = -rStrainRotOffset(0);
+    prevLStrainRot(0) = -prevLStrainRot(0);
+  }
   if(rStrainRot(2) < -prevRStrainRot(2)+jumpThreshold && rStrainRot(2) > -prevRStrainRot(2)-jumpThreshold)
+  {
     rStrainRotOffset(2) = -rStrainRotOffset(2);
+    prevLStrainRot(2) = -prevLStrainRot(2);
+  }
   if(rStrainRotWIMU(0) < -prevRStrainRotIMU(0)+jumpThreshold && rStrainRotWIMU(0) > -prevRStrainRotIMU(0)-jumpThreshold)
+  {
     rStrainRotIMUOffset(0) = -rStrainRotIMUOffset(0);
+    prevRStrainRotIMU(0) = -prevRStrainRotIMU(0);
+  }
   if(rStrainRotWIMU(2) < -prevRStrainRotIMU(2)+jumpThreshold && rStrainRotWIMU(2) > -prevRStrainRotIMU(2)-jumpThreshold)
+  {
     rStrainRotIMUOffset(2) = -rStrainRotIMUOffset(2);
+    prevRStrainRotIMU(2) = -prevRStrainRotIMU(2);
+  }
   
 //   cout << "IMU right foot: " << rort->toString() << endl;
 //   cout << "IMU to Earth right: " << rIMUtoEarth.asRPY().toString() << endl;
@@ -475,10 +539,10 @@ void WorkingThread::computeFeetOrt(int j, yarp::sig::Vector& lleg, yarp::sig::Ve
   }
   fprintf(r_foot_ort_imu_file, "\n");
   
-  prevLStrainRot = lStrainRot;
-  prevLStrainRotIMU = lStrainRotWIMU;
-  prevRStrainRot = rStrainRot;
-  prevRStrainRotIMU = rStrainRotWIMU;
+//   prevLStrainRot = prevLStrainRot;
+//   prevLStrainRotIMU = lStrainRotWIMU;
+//   prevRStrainRot = rStrainRot;
+//   prevRStrainRotIMU = rStrainRotWIMU;
   base_switch = false;
 }
 
@@ -501,6 +565,10 @@ void WorkingThread::dump_data(int j)
     yarp::os::Bottle* ft_r_foot_bottle = NULL;
     yarp::os::Bottle* ft_l_leg_bottle = NULL;
     yarp::os::Bottle* ft_r_leg_bottle = NULL;
+    yarp::os::Bottle* ft_l_foot_unbottle = NULL;
+    yarp::os::Bottle* ft_r_foot_unbottle = NULL;
+    yarp::os::Bottle* ft_l_leg_unbottle = NULL;
+    yarp::os::Bottle* ft_r_leg_unbottle = NULL;
     
     // Walking data vectors
     yarp::sig::Vector walk_com_vec;
@@ -579,46 +647,53 @@ void WorkingThread::dump_data(int j)
     
     if(dump_ft)
     {
+      ft_l_foot_bottle = ft_left_foot.read(false);//->get(5).asList()->get(0).asList()->get(0).asList();
+      ft_r_foot_bottle = ft_right_foot.read(false);//->get(5).asList()->get(0).asList()->get(0).asList();
+      ft_l_leg_bottle = ft_left_leg.read(false);//->get(5).asList()->get(0).asList()->get(0).asList();
+      ft_r_leg_bottle = ft_right_leg.read(false);//->get(5).asList()->get(0).asList()->get(0).asList();
+      
       // we want to read the bottles 4 and 5
-      if(ft_left_foot.read(false)->size() < 6 || ft_left_leg.read(false)->size() < 6 )
+      if(ft_l_foot_bottle->size() < 6 || ft_l_leg_bottle->size() < 6 )
       {
         cout << "Error in reading the FT on LEFT leg" << endl;
       }
-      if(ft_right_foot.read(false)->size() < 6 || ft_right_leg.read(false)->size() < 6 )
+      if(ft_r_foot_bottle->size() < 6 || ft_r_leg_bottle->size() < 6 )
       {
         cout << "Error in reading the FT on RIGHT leg" << endl;
       }
       
-      ft_l_foot_bottle = ft_left_foot.read(false)->get(5).asList()->get(0).asList()->get(0).asList();
-      ft_r_foot_bottle = ft_right_foot.read(false)->get(5).asList()->get(0).asList()->get(0).asList();
-      ft_l_leg_bottle = ft_left_leg.read(false)->get(5).asList()->get(0).asList()->get(0).asList();
-      ft_r_leg_bottle = ft_right_leg.read(false)->get(5).asList()->get(0).asList()->get(0).asList();
+//       cout << "@@@@@ Left" << ft_r_leg_bottle->toString() << endl;
       
-      fprintf(l_foot_ft_file, "%e, ", ft_left_foot.read(false)->get(6).asList()->get(0).asList()->get(0).asList()->get(0).asDouble());
-      for(unsigned int i = 0; i < 5; i++)
-      {
-        fprintf(l_foot_ft_file, "%e, ", ft_l_foot_bottle->get(i).asDouble());
-      }
-      fprintf(l_foot_ft_file, "%e\n", ft_l_foot_bottle->get(5).asDouble());
-      fprintf(r_foot_ft_file, "%e, ", ft_right_foot.read(false)->get(6).asList()->get(0).asList()->get(0).asList()->get(0).asDouble());
-      for(unsigned int i = 0; i < 5; i++)
-      {
-        fprintf(r_foot_ft_file, "%e, ", ft_r_foot_bottle->get(i).asDouble());
-      }
-      fprintf(r_foot_ft_file, "%e\n", ft_r_foot_bottle->get(5).asDouble());
+      ft_l_foot_unbottle = ft_l_foot_bottle->get(5).asList()->get(0).asList()->get(0).asList();
+      ft_r_foot_unbottle = ft_r_foot_bottle->get(5).asList()->get(0).asList()->get(0).asList();
+      ft_l_leg_unbottle = ft_l_leg_bottle->get(5).asList()->get(0).asList()->get(0).asList();
+      ft_r_leg_unbottle = ft_r_leg_bottle->get(5).asList()->get(0).asList()->get(0).asList();
       
-      fprintf(l_leg_ft_file, "%e, ", ft_left_leg.read(false)->get(6).asList()->get(0).asList()->get(0).asList()->get(0).asDouble());
+      fprintf(l_foot_ft_file, "%e, ", ft_l_foot_bottle->get(4).asList()->get(0).asList()->get(0).asList()->get(0).asDouble());
       for(unsigned int i = 0; i < 5; i++)
       {
-        fprintf(l_leg_ft_file, "%e, ", ft_l_leg_bottle->get(i).asDouble());
+        fprintf(l_foot_ft_file, "%e, ", ft_l_foot_unbottle->get(i).asDouble());
       }
-      fprintf(l_leg_ft_file, "%e\n", ft_l_leg_bottle->get(5).asDouble());
-      fprintf(r_leg_ft_file, "%e, ", ft_right_leg.read(false)->get(6).asList()->get(0).asList()->get(0).asList()->get(0).asDouble());
+      fprintf(l_foot_ft_file, "%e\n", ft_l_foot_unbottle->get(5).asDouble());
+      fprintf(r_foot_ft_file, "%e, ", ft_r_foot_bottle->get(4).asList()->get(0).asList()->get(0).asList()->get(0).asDouble());
       for(unsigned int i = 0; i < 5; i++)
       {
-        fprintf(r_leg_ft_file, "%e, ", ft_r_leg_bottle->get(i).asDouble());
+        fprintf(r_foot_ft_file, "%e, ", ft_r_foot_unbottle->get(i).asDouble());
       }
-      fprintf(r_leg_ft_file, "%e\n", ft_r_leg_bottle->get(5).asDouble());
+      fprintf(r_foot_ft_file, "%e\n", ft_r_foot_unbottle->get(5).asDouble());
+      
+      fprintf(l_leg_ft_file, "%e, ", ft_l_leg_bottle->get(4).asList()->get(0).asList()->get(0).asList()->get(0).asDouble());
+      for(unsigned int i = 0; i < 5; i++)
+      {
+        fprintf(l_leg_ft_file, "%e, ", ft_l_leg_unbottle->get(i).asDouble());
+      }
+      fprintf(l_leg_ft_file, "%e\n", ft_l_leg_unbottle->get(5).asDouble());
+      fprintf(r_leg_ft_file, "%e, ", ft_r_leg_bottle->get(4).asList()->get(0).asList()->get(0).asList()->get(0).asDouble());
+      for(unsigned int i = 0; i < 5; i++)
+      {
+        fprintf(r_leg_ft_file, "%e, ", ft_r_leg_unbottle->get(i).asDouble());
+      }
+      fprintf(r_leg_ft_file, "%e\n", ft_r_leg_unbottle->get(5).asDouble());
     }
     
     if(dump_enc || feetOrtTest)
@@ -641,23 +716,42 @@ void WorkingThread::dump_data(int j)
       fprintf(enc_data_file, "\n");
       
       // WARNING workaround
+      yarp::sig::Vector wbd_left_foot_ft = *wbd_left_foot.read(false);
+      yarp::sig::Vector wbd_right_foot_ft = *wbd_right_foot.read(false);
+      double ft_threshold = 85;
       if(dump_ft)
       {
-        double ft_threshold = 50;
-        if(ft_r_foot_bottle->get(2).asDouble() > ft_threshold && ft_r_foot_bottle->get(2).asDouble() > ft_threshold)
+        if(wbd_right_foot_ft(2) > ft_threshold && wbd_left_foot_ft(2) > ft_threshold)
           base_switch = false;
-        else if(current_base.compare("l_sole") && ft_r_foot_bottle->get(2).asDouble() > ft_threshold)
+        else if(current_base.compare("l_sole")==0 && wbd_right_foot_ft(2) > ft_threshold)
         {
           base_switch = true;
           current_base = "r_sole";
-          cout << "Switching to right base" << endl;
-        } else if(current_base.compare("r_sole") && ft_l_foot_bottle->get(2).asDouble() > ft_threshold)
+//           cout << "Switching to right base" << endl;
+        } else if(current_base.compare("r_sole")==0 && wbd_left_foot_ft(2) > ft_threshold)
         {
           base_switch = true;
           current_base = "l_sole";
-          cout << "Switching to left base" << endl;
+//           cout << "Switching to left base" << endl;
         }
       }
+//       if(dump_ft)
+//       {
+//         double ft_threshold = 50;
+//         if(ft_r_foot_unbottle->get(2).asDouble() > ft_threshold && ft_r_foot_unbottle->get(2).asDouble() > ft_threshold)
+//           base_switch = false;
+//         else if(current_base.compare("l_sole") && ft_r_foot_unbottle->get(2).asDouble() > ft_threshold)
+//         {
+//           base_switch = true;
+//           current_base = "r_sole";
+//           cout << "Switching to right base" << endl;
+//         } else if(current_base.compare("r_sole") && ft_l_foot_unbottle->get(2).asDouble() > ft_threshold)
+//         {
+//           base_switch = true;
+//           current_base = "l_sole";
+//           cout << "Switching to left base" << endl;
+//         }
+//       }
       
       if(feetOrtTest && dump_imu)
         computeFeetOrt(j,data_ll,data_rl,lort,rort);
